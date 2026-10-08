@@ -8,15 +8,17 @@ This project provides an AI Voice Room Assistant designed to participate in mult
 
 ---
 
-## 2. Current Checkpoint: Checkpoint 2 (Local Hindi/Hinglish TTS)
+## 2. Current Checkpoint: Checkpoint 3 (First Complete AI Participant — AI Dost)
 
-**Checkpoint 2** replaces the initial `TemporaryStubTTS` with a genuinely local, open-source Text-to-Speech implementation:
-- **TTS Engine:** Local [Piper TTS](https://github.com/rhasspy/piper) (`piper-tts` v1.8.0) using the `hi_IN-rohan-medium` ONNX voice model.
-- **₹0-Cost & Offline:** Executes 100% locally on CPU / Apple Silicon. No API keys, no cloud calls, no recurring fees.
-- **LiveKit Agents 1.8.5 Adapter:** Production-grade `PiperTTS` adapter inheriting from `livekit.agents.tts.TTS`, utilizing `AudioEmitter` for 16-bit PCM streaming.
-- **Single Python 3.12 Environment:** Maintained clean single-environment compatibility without dependency conflicts or external Python version isolation.
-- **Model Lifecycle:** The ONNX voice model is loaded once into memory upon initialization and reused across all subsequent synthesis turns.
-- **Comprehensive Smoke Test:** Automated test script (`scripts/tts_smoke_test.py`) validating Hindi Devanagari, Roman Hindi, Hinglish, and English.
+**Checkpoint 3** introduces the first complete, fully interactive conversational AI participant: **AI Dost**.
+
+- **Persona Profile:** Warm, friendly, approachable, and smart conversational Indian male assistant.
+- **Language & Code-Mixing:** Fluid handling of Hindi (Devanagari script & Roman script), conversational Hinglish, and clear English. Natural code-switching mirroring modern Indian conversational habits.
+- **Voice-Optimized Dialogue:** Enforces 1–4 short, punchy spoken sentences per turn. Strictly avoids robotic clichés (*"As an AI language model..."*), markdown lists, bullet points, headers, emojis, and code blocks that degrade TTS output.
+- **Natural Room Greeting:** Automatically delivers a warm spoken greeting upon connecting to a voice room:
+  > *"Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"*
+- **Local Indian Voice Synthesis:** Powered by the local `hi_IN-rohan-medium` Piper ONNX voice model with sub-100ms generation on Apple Silicon / CPU at ₹0 cost.
+- **Clean Persona Isolation:** System instructions and persona behaviors are cleanly encapsulated in `app/personas/dost.py`, keeping LiveKit orchestration in `app/agent.py` minimal and beginner-friendly.
 
 ---
 
@@ -28,6 +30,7 @@ This project provides an AI Voice Room Assistant designed to participate in mult
 - **LLM (Language Model):** [OpenRouter](https://openrouter.ai/) (default: `openrouter/free`) via `livekit-plugins-openai`
 - **VAD (Voice Activity Detection):** Silero VAD (local open-source inference bundled with LiveKit Agents)
 - **TTS (Text-to-Speech):** [Piper TTS](https://github.com/rhasspy/piper) (`hi_IN-rohan-medium` ONNX model, trained on IIT Madras Indic TTS dataset)
+- **Active Persona:** `AIDost` (`app/personas/dost.py`)
 - **Dependency Management:** `uv`
 - **Configuration:** Typed `Settings` class with `python-dotenv`
 - **Testing:** `pytest` & `pytest-asyncio`
@@ -59,26 +62,30 @@ After evaluating multiple candidate models, **Piper TTS** with the `hi_IN-rohan-
 
 ---
 
-## 5. LiveKit TTS Integration Architecture
+## 5. LiveKit Agents & Persona Architecture
 
 The architecture maintains strict separation of concerns, keeping `app/agent.py` clean and beginner-friendly:
 
 ```text
-app/agent.py (orchestration entrypoint)
-    ↓
-create_tts(settings)
-    ↓
-app/tts.py (PiperTTS adapter inheriting from livekit.agents.tts.TTS)
-    ↓
-_PiperChunkedStream (handles async synthesis and LiveKit AudioEmitter)
-    ↓
-piper.PiperVoice (loaded once in memory, runs inference in worker thread pool)
+LiveKit Room (WebRTC Audio Stream)
+       ↓
+LiveKit Agent Worker (AgentServer)
+       ↓
+JobContext (Room connection & lifecycle)
+       ↓
+AgentSession (STT: Groq Whisper, LLM: OpenRouter Free, TTS: Piper Local, VAD: Silero)
+       ↓
+AIDost (app/personas/dost.py — Warm, conversational buddy persona)
+       ↓
+Spoken Greeting: "Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"
 ```
 
 ### Key Technical Details
 
-- **Non-Streaming Adapter:** Piper models generate audio per sentence. The adapter sets `capabilities=TTSCapabilities(streaming=False)`. LiveKit's runtime automatically wraps this with `tts.StreamAdapter`, which buffers and splits streaming LLM text by sentence using `tokenize.blingfire.SentenceTokenizer`.
-- **Audio Framing:** Synthesized 16-bit mono PCM audio (22,050 Hz) is passed to LiveKit's `AudioEmitter(mime_type="audio/pcm")`, which frames the raw audio into standard `rtc.AudioFrame` chunks suitable for WebRTC audio tracks.
+- **Clean Persona Abstraction:** `AIDost` inherits from LiveKit's `Agent` class and binds `AI_DOST_INSTRUCTIONS` as its system prompt. Adding future personas (e.g. AI Sathi) requires zero changes to the underlying STT/TTS engine logic.
+- **Spoken Greeting via `session.say`:** When the agent joins the room, `await session.say(AI_DOST_GREETING)` synthesizes and streams the opening greeting through the room's WebRTC audio track and automatically adds the turn to the session history.
+- **Non-Streaming TTS with Sentence Chunking:** Piper is an utterance-level model (`capabilities=TTSCapabilities(streaming=False)`). LiveKit's runtime wraps this with `tts.StreamAdapter`, which buffers and splits streaming LLM text by sentence using `tokenize.blingfire.SentenceTokenizer`.
+- **Audio Framing:** Synthesized 16-bit mono PCM audio (22,050 Hz) is emitted to LiveKit's `AudioEmitter(mime_type="audio/pcm")`, which frames raw audio into standard `rtc.AudioFrame` chunks suitable for WebRTC audio tracks.
 - **Non-Blocking Async:** Heavy ONNX matrix computations are dispatched via `asyncio.to_thread(self._synthesize_raw_pcm, text)` to keep the asyncio event loop responsive.
 - **Model Re-use:** `PiperVoice.load()` is executed once on startup or first turn. Subsequent synthesis calls reuse the in-memory voice session.
 
@@ -86,23 +93,52 @@ piper.PiperVoice (loaded once in memory, runs inference in worker thread pool)
 
 ## 6. Hindi & Hinglish Evaluation Results
 
-The implementation was validated against four core categories via `scripts/tts_smoke_test.py`:
+The implementation was validated against five core categories via `scripts/tts_smoke_test.py`:
 
 | Test Category | Test Input | Audio Duration | Inference Time | Real-Time Factor (RTF) | Quality / Intonation Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Hindi Devanagari** | `"नमस्ते! आज आप कैसे हैं?"` | 2.83s | 0.478s | 0.17x | Highly authentic, natural Hindi pronunciation and inflection. |
+| **AI Dost Greeting** | `"Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"` | 4.88s | 0.155s | 0.03x | Warm, conversational Indian male greeting; clear natural cadence. |
+| **Hindi Devanagari** | `"नमस्ते! आज आप कैसे हैं?"` | 2.83s | 0.478s | 0.17x | Authentic Hindi pronunciation and inflection. |
 | **Roman Hindi** | `"Aaj kya kar rahe ho?"` | 1.77s | 0.049s | 0.03x | Phonemized and spoken with clear conversational Hindi intonation. |
 | **Hinglish** | `"Haan, basically iska main idea ye hai ki hum context maintain karte hain."` | 6.01s | 0.161s | 0.03x | Fluid transition between Hindi verbs and English technical nouns. |
 | **English** | `"Can you explain this in simple terms?"` | 2.77s | 0.071s | 0.03x | Clear Indian-accented English pronunciation. |
 
-### Known Limitations
+---
 
-- **Devanagari vs. Romanized Text:** While Roman Hindi is supported via `espeak-ng` phonemization rules, Devanagari script produces the most consistent and accurate prosody. Unambiguous phonetic spelling or Devanagari input is recommended for complex Hindi terms.
-- **Sentence-Level Chunking:** Piper is an utterance-level model rather than a token-streaming model. However, because inference latency is under 150ms per sentence, Time-To-First-Byte (TTFB) remains well within conversational standards.
+## 7. Manual Test Scenarios
+
+The following 5 test scenarios validate AI Dost's conversational quality, persona adherence, language versatility, and TTS formatting constraints:
+
+### Scenario 1 — Hindi Inquiry
+- **User Prompt:** `"Bhai mujhe batao API kya hoti hai?"`
+- **Expected Persona Behavior:** AI Dost explains an API in warm Hindi/Hinglish using a natural everyday analogy (e.g. restaurant waiter taking orders to the kitchen or a bridge connecting two apps).
+- **TTS Constraints:** Response must be 2–3 short spoken sentences, strictly avoiding bulleted lists, numbered steps, or markdown formatting.
+
+### Scenario 2 — English Inquiry
+- **User Prompt:** `"Can you explain what an API is?"`
+- **Expected Persona Behavior:** AI Dost responds naturally in clear English, maintaining an approachable, friendly conversational tone.
+- **TTS Constraints:** 2–3 spoken sentences, natural phrasing, no robotic jargon or formal disclaimers.
+
+### Scenario 3 — Hinglish Technical Explanation
+- **User Prompt:** `"Bhai backend mein authentication kaise kaam karta hai?"`
+- **Expected Persona Behavior:** AI Dost naturally code-switches, pairing Hindi conversational framing (*"Basically jab user login karta hai..."*) with standard English technical terms (*credentials, verify, token, session*).
+- **TTS Constraints:** Explains authentication flow concisely without code blocks, markdown tables, or jargon dumps.
+
+### Scenario 4 — Multi-Turn Follow-Up (Context Maintenance)
+- **Turn 1:** `"Docker kya hai?"`
+- **Turn 2:** `"Aur Kubernetes?"`
+- **Turn 3:** `"Simple language mein difference batao."`
+- **Expected Persona Behavior:** Maintains dialogue history across all three turns. In Turn 3, directly contrasts Docker (the container/box) and Kubernetes (the manager/orchestrator managing all boxes) without needing the user to repeat previous context.
+- **TTS Constraints:** Short, spoken comparison in 2–3 sentences.
+
+### Scenario 5 — Casual / Emotional Conversation
+- **User Prompt:** `"Aaj mood thoda kharab hai."`
+- **Expected Persona Behavior:** AI Dost acts like an empathetic Indian friend. Acknowledges the user's feeling with warmth (*"Arre kya hua bhai? Sab theek to hai? Agar baat karni hai toh batao, main sun raha hoon."*).
+- **Anti-Pattern Check:** Strictly avoids robotic disclaimers like *"As an AI, I do not have feelings or personal emotions."*
 
 ---
 
-## 7. ₹0-Cost Architecture Compliance
+## 8. ₹0-Cost Architecture Compliance
 
 | Component | Provider / Tool | Cost | Rationale |
 | :--- | :--- | :--- | :--- |
@@ -111,11 +147,12 @@ The implementation was validated against four core categories via `scripts/tts_s
 | **LLM** | OpenRouter (`openrouter/free`) | ₹0 | Free-tier models accessed via standard API keys. |
 | **VAD** | Silero VAD (local ONNX/Inference) | ₹0 | Runs locally on CPU, no external network requests. |
 | **TTS** | Piper TTS (`hi_IN-rohan-medium`) | **₹0** | **Runs 100% locally on CPU / Apple Silicon. No API keys.** |
+| **Persona** | AI Dost (`app/personas/dost.py`) | ₹0 | Clean in-memory prompt and agent architecture. |
 | **Paid Services** | LiveKit Inference / OpenAI Paid API / ElevenLabs | **NONE** | **Strictly prohibited & omitted.** |
 
 ---
 
-## 8. Installation & Setup
+## 9. Installation & Setup
 
 ### Prerequisites
 
@@ -163,7 +200,7 @@ LOG_LEVEL=INFO
 
 ---
 
-## 9. Running Verification & Smoke Tests
+## 10. Running Verification & Smoke Tests
 
 ### Run the TTS Smoke Test (Actual Model Inference)
 ```bash
@@ -171,7 +208,7 @@ uv run python scripts/tts_smoke_test.py
 ```
 *Note: On first run, this automatically downloads the ~63 MB `hi_IN-rohan-medium` ONNX model and config into `models/`.*
 
-### Run Fast Unit Tests (No Model Download Required)
+### Run Fast Unit Tests (No External Network or GPU Required)
 ```bash
 uv run pytest -v
 ```
@@ -194,15 +231,14 @@ uv run python -m app.agent console
 
 ---
 
-## 10. What Has NOT Been Implemented Yet (Deferred to Later Checkpoints)
+## 11. What Has NOT Been Implemented Yet (Deferred to Later Checkpoints)
 
-To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 2:
-- **AI Dost & AI Sathi Dual Personas:** Personality prompt specializations and distinct roles.
-- **Two-Bot Turn Routing:** Room orchestration and turn mediation.
-- **Conversation Memory:** Short-term and long-term dialogue history and persistence.
-- **Speaker-Specific Context:** Tracking individual user profiles, names, or speech turns.
-- **Interruption Orchestration:** Custom barge-in arbitration policies beyond standard VAD.
+To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 3:
+- **AI Sathi (Second Persona):** Analytical, professional Indian female persona deferred to Checkpoint 4.
+- **Two-Bot Turn Routing & Mediation:** Turn handoff, arbitrator, or bot-selection mechanisms deferred.
+- **Persistent Database Memory / Vector Store / RAG:** External document search or vector storage deferred.
+- **Speaker Diarization / Multi-User Profiling:** Recognizing specific individual user identities.
+- **Custom Interruption Orchestration:** Advanced interruption arbitration policies beyond standard Silero VAD barge-in.
 - **Frontend Web / Mobile App:** LiveKit client interface for end users.
-- **Database / Vector Store / RAG:** External document search or vector storage.
 - **Function Calling / Tools:** External API tools (weather, time, web search).
-- **Docker & Deployment Infrastructure:** Containerization and production orchestration.
+- **Docker & Deployment Infrastructure:** Containerization and cloud deployment.

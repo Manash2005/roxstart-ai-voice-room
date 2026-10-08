@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 from app.config import Settings
+from app.personas import AI_DOST_GREETING
 from app.tts import create_tts
 
 TEST_CASES = [
@@ -35,6 +36,10 @@ TEST_CASES = [
     (
         "English",
         "Can you explain this in simple terms?",
+    ),
+    (
+        "AI Dost Greeting",
+        AI_DOST_GREETING,
     ),
 ]
 

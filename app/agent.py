@@ -9,8 +9,9 @@ Checkpoint 1: Initial production-quality foundation using:
 
 from __future__ import annotations
 
+import asyncio
+
 from livekit.agents import (
-    Agent,
     AgentServer,
     AgentSession,
     JobContext,
@@ -21,16 +22,18 @@ from livekit.plugins import groq, openai
 
 from app.config import Settings, get_settings
 from app.logging import get_logger, setup_logging
+from app.personas import (
+    AI_DOST_GREETING,
+    AI_DOST_INSTRUCTIONS,
+    AIDost,
+)
 from app.tts import create_tts
 
 logger = get_logger(__name__)
 
-# Default system instruction for the assistant in Checkpoint 2
-DEFAULT_SYSTEM_INSTRUCTION = (
-    "You are a helpful voice assistant. "
-    "Understand Hindi, Hinglish, and English. "
-    "Respond naturally and conversationally."
-)
+# Backward-compatible aliases for Checkpoint 1 & 2 references
+VoiceAssistantAgent = AIDost
+DEFAULT_SYSTEM_INSTRUCTION = AI_DOST_INSTRUCTIONS
 
 
 # ------------------------------------------------------------------------------
@@ -68,21 +71,6 @@ def create_llm(settings: Settings) -> openai.LLM:
 
 
 # ------------------------------------------------------------------------------
-# Agent Persona Definition
-# ------------------------------------------------------------------------------
-class VoiceAssistantAgent(Agent):
-    """Voice Assistant Agent representing assistant behavior and instructions.
-
-    Inherits from LiveKit's Agent class to encapsulate conversation instructions.
-    Multi-persona logic (AI Dost, AI Sathi) and routing will be introduced
-    in future checkpoints.
-    """
-
-    def __init__(self, instructions: str = DEFAULT_SYSTEM_INSTRUCTION) -> None:
-        super().__init__(instructions=instructions)
-
-
-# ------------------------------------------------------------------------------
 # LiveKit Core Flow
 #
 #   AgentServer  -> Worker process manager listening for LiveKit room dispatches
@@ -91,7 +79,7 @@ class VoiceAssistantAgent(Agent):
 #       ↓
 #   AgentSession -> Orchestrator connecting STT, LLM, TTS, VAD, and turn detection
 #       ↓
-#   Agent        -> Defines assistant persona, instructions, and tools
+#   AI Dost Agent-> First complete conversational participant persona
 #       ↓
 #   STT / LLM / TTS
 # ------------------------------------------------------------------------------
@@ -120,8 +108,8 @@ async def entrypoint(ctx: JobContext) -> None:
     llm_provider = create_llm(settings)
     tts_provider = create_tts(settings)
 
-    # 4. Agent: Initialize assistant persona and instructions
-    assistant = VoiceAssistantAgent()
+    # 4. Agent: Initialize AI Dost participant persona
+    assistant = AIDost()
 
     # 5. AgentSession: Realtime voice session orchestrating media streams and models
     session = AgentSession(
@@ -131,9 +119,15 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     # 6. session.start(): Attach the agent to the room audio/video streams
-    logger.info("Starting voice assistant session...")
+    logger.info("Starting AI Dost voice session...")
     await session.start(agent=assistant, room=ctx.room)
-    logger.info("Voice assistant session active in room '%s'", ctx.room.name)
+    logger.info("AI Dost session active in room '%s'", ctx.room.name)
+
+    # 7. Automatic Greeting: Speak AI Dost's warm introductory greeting
+    try:
+        await session.say(AI_DOST_GREETING)
+    except (RuntimeError, TimeoutError, asyncio.CancelledError) as e:
+        logger.debug("Initial greeting skipped or cancelled: %s", e)
 
 
 def main() -> None:
@@ -147,7 +141,7 @@ def main() -> None:
 
     settings = get_settings()
     setup_logging(settings.log_level)
-    logger.info("Starting Roxstar AI Voice Room Assistant (Checkpoint 1)...")
+    logger.info("Starting Roxstar AI Voice Room Assistant (Checkpoint 3 - AI Dost)...")
 
     # agents.cli.run_app: Standard LiveKit CLI runner supporting 'dev', 'start', etc.
     cli.run_app(server)
