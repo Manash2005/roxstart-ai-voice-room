@@ -7,24 +7,33 @@ A production-quality Python realtime voice assistant project built for the Roxst
 This project provides an AI Voice Room Assistant designed to participate in multi-user voice rooms, understand bilingual/code-mixed speech (Hindi, Hinglish, and English), and respond naturally and conversationally. The project is constructed incrementally across distinct checkpoints, adhering strictly to a **₹0-cost** architecture utilizing free tiers and open-source models.
 
 ---
-## 2. Current Checkpoint: Checkpoint 5 (Two-Bot Orchestration Layer)
+## 2. Current Checkpoint: Checkpoint 6 (Contextual Memory + Multi-Speaker Interaction)
 
-**Checkpoint 5** introduces the central two-bot orchestration layer, allowing **AI Dost** and **AI Sathi** to logically coexist within the same LiveKit room without speech collision, duplicate turns, or multiple concurrent STT/LLM sessions.
+**Checkpoint 6** introduces shared in-session conversational memory and multi-speaker room interaction, allowing **AI Dost** and **AI Sathi** to share conversation context, track multiple human speakers, unify voice and text inputs, and resolve conversational follow-ups (*"uska"*, *"same problem"*, *"simple batao"*) naturally without requiring any external database or paid services.
 
-- **Logical Coexistence:** Both AI participants are represented in the same room. A central orchestrator receives each user utterance and dynamically assigns turn ownership.
-- **Priority-Based Turn Routing ([app/routing/router.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/router.py)):**
-  1. **Priority 1 — Explicit Bot Addressing:** Utterances explicitly naming *"Dost"*, *"AI Dost"*, *"Bhai Dost"* route to Dost; utterances naming *"Sathi"*, *"AI Sathi"*, *"Sathi ji"* route to Sathi. Explicit addressing always overrides topic classification.
-  2. **Priority 2 — Conversation Ownership:** Follow-up questions (*"Aur Kubernetes?"*, *"Simple batao"*, *"Why?"*, *"Isme kya problem hai?"*, *"Aur iska alternative?"*) maintain context and stay with the currently active bot.
-  3. **Priority 3 — Topic/Intent Classification:** Technical comparisons (*"difference"*, *"compare"*, *"vs"*, *"trade-off"*, *"architecture"*) route to AI Sathi; casual conversation, mood check-ins, or buddy banter route to AI Dost.
-  4. **Priority 4 — Deterministic Default Fallback:** Queries without explicit addressing or analytical intent default deterministically to AI Dost.
-- **Mutual Exclusion & Arbitration ([app/routing/arbitrator.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/arbitrator.py)):**
-  - An asyncio-safe `ResponseArbitrator` guarantees that at most ONE bot speaks at any time.
-  - If Dost is speaking, Sathi cannot start; if Sathi is speaking, Dost cannot start.
-  - When speech generation concludes, the lock is released cleanly.
-- **LiveKit Room Participant Identity:**
-  - The LiveKit participant name is dynamically updated (`set_name("AI Dost")` vs `set_name("AI Sathi")`) and metadata attributes (`set_attributes({"active_bot": "ai-dost", "available_bots": "ai-dost,ai-sathi"})`) reflect the active responder in real-time.
-- **Controlled Collaborative Addressing ("Both Bots"):**
-  - For questions addressing both bots (*"Both of you, what do you think?"*), the router defaults to AI Dost with reason `collaborative_deferred`, preventing uncoordinated double speech. Full sequential multi-bot dialogue is deferred.
+- **Shared In-Memory Session Context ([app/memory/conversation_memory.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/memory/conversation_memory.py)):**
+  - Thread-safe, bounded memory (`max_turns=12`) shared by both AI participants.
+  - Automatic FIFO eviction prevents unbounded prompt growth and controls LLM token budgets.
+  - Both AI Dost and AI Sathi read and write to this single unified conversation history.
+- **Speaker Attribution & Tracking ([app/memory/turn.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/memory/turn.py)):**
+  - Turns are attributed to stable participant identities (`speaker_id`) alongside friendly display names (`speaker_name`).
+  - Context is formatted with speaker attribution: `- Manash (voice): "Mera project Python mein hai."`.
+  - When metadata is unavailable, safe fallbacks (`"human"`, `"User"`) ensure continuous uptime.
+- **Voice + Text Modality Unification:**
+  - Chat text messages received via LiveKit text stream and voice transcripts from Groq Whisper enter the identical chronological memory queue.
+  - A user can speak by voice and follow up via text (or vice versa), and both bots maintain seamless conversational continuity.
+- **Dynamic Multi-Human Room Ear Switching:**
+  - LiveKit `Room.on("active_speakers_changed")` monitors room audio activity.
+  - When a new human speaks, `session_dost.room_io.set_participant(active_human.identity)` dynamically retargets the primary STT ear without restarting the session.
+  - AI agents (`ai-dost`, `ai-sathi`) are strictly filtered out to prevent audio loopbacks or self-triggering.
+- **Context Injection with Persona Isolation:**
+  - Base persona definitions (`AI_DOST_INSTRUCTIONS`, `AI_SATHI_INSTRUCTIONS`) remain 100% constant and authoritative.
+  - Conversation context is injected separately as untrusted data (`role="system"`, `id="conversation_context"`), ensuring user dialogue cannot override core assistant constraints.
+- **Zero Database / ₹0 Cost:**
+  - 100% in-memory Python structures. No vector DBs, Redis, PostgreSQL, or embeddings are introduced.
+  - Memory is cleared automatically on session shutdown (`JobContext.add_shutdown_callback`).
+- **Privacy First:**
+  - No raw microphone audio, audio buffers, or recordings are written to disk. Only normalized text transcripts and minimal speaker metadata are temporarily buffered in RAM.
 
 ---
 
@@ -70,45 +79,57 @@ After evaluating multiple candidate models, **Piper TTS** with the `hi_IN-rohan-
 
 ---
 
-## 5. LiveKit Agents & Orchestration Architecture
+## 5. LiveKit Dual-Participant Architecture (Checkpoint 5A)
 
-The central two-bot orchestration layer ensures a single STT/LLM stream while dynamically arbitrating persona execution:
+The two-bot architecture upgrades from single-participant display renaming to **two genuine, simultaneously visible LiveKit participants**:
 
 ```text
-LiveKit Room (WebRTC Audio Stream)
-       │
-       ▼
-JobContext (Room connection & lifecycle)
-       │
-       ▼
-AgentSession (Single Groq STT, Single OpenRouter LLM, Single Piper TTS)
-       │
-       ▼
-TwoBotOrchestrator (app/routing/orchestrator.py)
-       │
-       ├── TurnRouter (app/routing/router.py)
-       │     ├── 1. Explicit Address: "Dost..." / "Sathi..."
-       │     ├── 2. Conversation Owner: Follow-up continuations
-       │     ├── 3. Topic Classifier: Comparison vs Casual
-       │     └── 4. Deterministic Default: AI Dost
-       │
-       ├── ResponseArbitrator (app/routing/arbitrator.py)
-       │     └── Asyncio Mutex: Prevents simultaneous speech turns
-       │
-       ├── ChatContext Instructions Injection:
-       │     ├── If Dost: AI_DOST_INSTRUCTIONS (app/personas/dost.py)
-       │     └── If Sathi: AI_SATHI_INSTRUCTIONS (app/personas/sathi.py)
-       │
-       └── Dynamic Room Identity Update:
-             └── local_participant.set_name("AI Dost" / "AI Sathi")
+                               LiveKit Room (WebRTC)
+                                         │
+              ┌──────────────────────────┴──────────────────────────┐
+              ▼                                                     ▼
+     [Participant 1: ai-dost]                              [Participant 2: ai-sathi]
+     (Primary Job WebRTC Conn)                             (Secondary WebRTC Conn)
+              │                                                     │
+   Subscribes to User Audio                                         │ (audio_enabled=False)
+              │                                                     │ (auto_subscribe=False)
+              ▼                                                     │
+      Single Silero VAD                                             │
+              ▼                                                     │
+    Single Groq Whisper STT                                         │
+              ▼                                                     │
+    TwoBotOrchestrator                                              │
+              │                                                     │
+      TurnRouter (Priorities 1-4)                                   │
+              │                                                     │
+      ResponseArbitrator                                            │
+        /             \                                             │
+  (Dost Turn)     (Sathi Turn)                                      │
+       │               │                                            │
+       ▼               ▼                                            ▼
+  Primary Agent   Raise StopResponse() ──────────► session_sathi.generate_reply(
+  generates via   (Suppresses Dost speech)         user_input=transcript)
+  OpenRouter LLM                                                    │
+       │                                                            ▼
+  Piper TTS (Dost)                                          OpenRouter LLM (Sathi)
+       │                                                            │
+       ▼                                                            ▼
+  Audio published to                                         Piper TTS (Sathi)
+  ai-dost track                                                     │
+                                                                    ▼
+                                                             Audio published to
+                                                             ai-sathi track
 ```
 
 ### Key Technical Details
 
-- **Single Audio Pipeline:** A single `AgentSession` manages room audio, preventing redundant STT transcripts, duplicate audio tracks, or race conditions.
-- **Dynamic System Prompt Swapping:** In `on_user_turn_completed`, the orchestrator injects the routed persona's system prompt into the turn's `ChatContext` using `update_instructions`, ensuring the LLM generates in character.
-- **Mutual Exclusion Lock:** `arbitrator.acquire()` locks speech generation for the active bot; if locked, incoming overlapping turns raise `StopResponse()`.
-- **Automatic Turn Release:** When speech concludes (`AgentStateChangedEvent` transitions to `idle`/`listening`), `arbitrator.release()` unlocks the turn.
+- **Two Real LiveKit Participants:** `ai-dost` (display name: "AI Dost") and `ai-sathi` (display name: "AI Sathi") both join the room as distinct WebRTC participants with their own participant SIDs.
+- **Strictly Single STT Pipeline:** Only `session_dost` listens to room audio. `session_sathi` joins with `auto_subscribe=False` and `RoomInputOptions(audio_enabled=False, text_enabled=False)`. Zero duplicate Whisper calls are incurred.
+- **Clean Sathi Dispatch via `generate_reply()`:** When a turn is routed to AI Sathi, the orchestrator raises `StopResponse()` on the primary session (cancelling AI Dost's generation) and invokes `session_sathi.generate_reply(user_input=transcript)`.
+- **Zero Audio Loopback:** Sathi connects with participant kind `agent`, which LiveKit's default `RoomIO` automatically ignores for human speech recognition.
+- **Mutual Exclusion Lock:** `arbitrator.acquire()` locks speech generation for the active bot. Sathi speech completion triggers a done callback on its `SpeechHandle` to release the lock.
+- **Barge-In Interruption:** When the primary session detects user speech while Sathi is responding, `session_sathi.interrupt()` is called immediately to yield the turn.
+- **Graceful Cleanup:** `JobContext.add_shutdown_callback` disconnects the secondary participant room on worker shutdown, preventing ghost participants.
 
 ---
 
@@ -233,7 +254,7 @@ LOG_LEVEL=INFO
 uv run python scripts/tts_smoke_test.py
 ```
 
-### Run Full Fast Unit Test Suite (58 tests)
+### Run Full Fast Unit Test Suite (82 tests)
 ```bash
 uv run pytest -v
 ```
@@ -256,15 +277,72 @@ uv run python -m app.agent console
 
 ---
 
-## 11. What Has NOT Been Implemented Yet (Deferred to Later Checkpoints)
+## 11. Checkpoint 6 Manual Verification Scenarios
 
-To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 5:
+The following 9 manual test scenarios validate multi-speaker interaction, contextual memory, and voice/text unification:
+
+### Test 1 — Two Humans in the Room
+- **Room Setup:** `Human A`, `Human B`, `AI Dost`, `AI Sathi`.
+- **Action:** Both humans contribute turns.
+- **Expected Result:** `active_speakers_changed` dynamically links the primary ear to the currently speaking human. Both human turns enter the unified shared memory.
+
+### Test 2 — Shared Conversational Context
+- **Human A:** `"Mera project React mein hai."` -> AI responds.
+- **Human A:** `"Backend ke liye kya use karu?"`
+- **Expected Result:** The bot uses the earlier React context to suggest Node.js, Express, Fastify, or Django without asking the user to repeat their project type.
+
+### Test 3 — Cross-Speaker Context Tracking
+- **Human A:** `"Mera project React mein hai."`
+- **Human B:** `"Mera Python mein."`
+- **Human A:** `"Mere liye database suggest karo."`
+- **Expected Result:** Context contains both speakers' turns with identity attribution. The model associates Human A with React and suggests appropriate database solutions.
+
+### Test 4 — Pronoun & Follow-Up Resolution
+- **Human:** `"Explain Docker."` -> Bot responds.
+- **Human:** `"Aur Kubernetes?"`
+- **Expected Result:** Follow-up retains Docker context and explains Kubernetes in relation to container orchestration.
+
+### Test 5 — Natural Hinglish Conversational Cadence
+- **Human:** `"Simple language mein batao, Kubernetes actually karta kya hai?"`
+- **Expected Result:** The response explains the concept using natural conversational Hinglish analogies while maintaining persona constraints (no markdown tables, no emojis).
+
+### Test 6 — Text to Voice Context Continuity
+- **Action 1 (Text):** Human types `"I'm building a Node backend."`
+- **Action 2 (Voice):** Human speaks `"Isme database kya use karu?"`
+- **Expected Result:** Voice turn sees the text turn in shared memory and provides database suggestions tailored to Node.js.
+
+### Test 7 — Voice to Text Context Continuity
+- **Action 1 (Voice):** Human speaks `"Mujhe Redis samajhna hai."`
+- **Action 2 (Text):** Human types `"Why is it fast?"`
+- **Expected Result:** Text query receives an answer explaining why Redis is an in-memory datastore.
+
+### Test 8 — Cross-Bot Context Handoff
+- **Human:** `"Dost, Docker simple way mein samjhao."` -> AI Dost responds.
+- **Human:** `"Sathi, isko thoda technically explain karo."` -> Explicit routing switches to AI Sathi.
+- **Expected Result:** AI Sathi receives AI Dost's previous explanation in `chat_ctx` and explains Docker's technical architecture without restarting the conversation.
+
+### Test 9 — Privacy & Zero Audio Persistence
+- **Action:** Inspect the workspace and storage directory after voice interactions.
+- **Expected Result:** Zero raw audio WAV/MP3 files or microphone recordings exist on disk. Only ephemeral in-memory transcripts exist.
+
+---
+
+## 12. Known Limitations & Scope Boundaries
+
+1. **Acoustic Speaker Diarization:** Participant attribution relies on WebRTC participant identity (`speaker_id`) and active speaker events, not acoustic voiceprint biometric diarization. If two humans share one microphone, the system attributes speech to that single participant ID.
+2. **Sequential Speaker Focus:** When multiple humans speak concurrently, LiveKit RoomIO switches its listening focus to the primary active speaker. It does not perform simultaneous multi-track acoustic audio separation or mixing.
+3. **Session-Scoped Ephemeral Memory:** Memory is bounded to the recent `max_turns=12` turns and is cleared upon room session disconnection. No persistent cross-session memory, database, or long-term vector embeddings are implemented.
+4. **LLM Context Limits:** Complex conversational coreference relies on LLM prompt comprehension within the bounded context window; deeply nested cross-speaker debates may occasionally suffer from pronoun ambiguity.
+
+---
+
+## 13. What Has NOT Been Implemented Yet (Deferred to Checkpoint 7+)
+
+To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 6:
 - **Persistent Database Memory / Vector Store / RAG:** External storage, SQLite/PostgreSQL, ChromaDB/Pinecone deferred.
-- **Speaker Identification / Diarization:** Distinguishing different human participants by name/voice fingerprint.
+- **Acoustic Voice Biometrics:** Deep speaker embedding voiceprints.
 - **Custom Interruption Orchestration:** Advanced interruption arbitration policies beyond standard Silero VAD barge-in.
 - **Frontend Web / Mobile App:** LiveKit client interface for end users.
 - **Function Calling / Tools:** External API tools (weather, time, web search).
-- **Docker & Deployment Infrastructure:** Containerization and cloud deployment.
- tools (weather, time, web search).
 - **Docker & Deployment Infrastructure:** Containerization and cloud deployment.
 

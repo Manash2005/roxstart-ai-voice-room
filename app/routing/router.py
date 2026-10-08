@@ -63,10 +63,13 @@ class TurnRouter:
 
         # Priority 2: Follow-up continuation patterns
         self._followup_starters = re.compile(
-            r"(?i)^(aur\s+|and\s+|what\s+about\s+|how\s+about\s+|why\b|kyun\b|kyu\b|isme\s+|iska\s+|iski\s+|iske\s+)"
+            r"(?i)^(aur\s+|and\s+|what\s+about\s+|how\s+about\s+|why\b|kyun\b|kyu\b|isme\s+|iska\s+|iski\s+|iske\s+|uska\s+|uski\s+|uske\s+|wahi\s+|same\s+)"
         )
         self._followup_short = re.compile(
-            r"(?i)^(simple\s+batao|simple\s+language|simple\s+difference|simple\s+example|example\s+do|aur\s+kya|explain\s+further|kuch\s+aur)"
+            r"(?i)^(simple\s+batao|simple\s+language|simple\s+difference|simple\s+example|example\s+do|aur\s+kya|explain\s+further|kuch\s+aur|wahi\s+jo|same\s+problem)"
+        )
+        self._followup_reference = re.compile(
+            r"(?i)\b(same\s+problem|same\s+issue|wahi\s+problem|wahi\s+issue|wahi\s+topic|wahi\s+cheez)\b"
         )
 
         # Priority 3: Topic / Intent classification patterns
@@ -152,6 +155,7 @@ class TurnRouter:
             is_followup = (
                 self._followup_starters.search(cleaned) is not None
                 or self._followup_short.search(cleaned) is not None
+                or self._followup_reference.search(cleaned) is not None
                 or len(words) <= 4
             )
             if is_followup:
