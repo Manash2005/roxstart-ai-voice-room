@@ -40,6 +40,15 @@ env/
 htmlcov/
 .tox/
 
+# Models & Audio
+models/*.onnx
+models/*.json
+models/*.bin
+output_audio/
+*.wav
+*.mp3
+
+
 # IDE & OS
 .vscode/
 .idea/

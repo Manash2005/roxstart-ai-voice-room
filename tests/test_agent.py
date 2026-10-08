@@ -1,4 +1,6 @@
-"""Unit tests for LiveKit Voice Room Assistant Agent (Checkpoint 1)."""
+"""Unit tests for LiveKit Voice Room Assistant Agent (Checkpoint 2)."""
+
+from unittest.mock import MagicMock
 
 import pytest
 from livekit.agents import AgentServer, AgentSession
@@ -6,14 +8,24 @@ from livekit.plugins import groq, openai
 
 from app.agent import (
     DEFAULT_SYSTEM_INSTRUCTION,
-    TemporaryStubTTS,
     VoiceAssistantAgent,
     create_llm,
     create_stt,
-    create_tts,
     server,
 )
 from app.config import Settings
+from app.tts import PiperTTS, create_tts
+
+
+class MockPiperVoice:
+    """Mock PiperVoice avoiding model download during tests."""
+
+    def __init__(self, sample_rate: int = 22050) -> None:
+        self.config = MagicMock()
+        self.config.sample_rate = sample_rate
+
+    def synthesize(self, text: str):
+        return iter([])
 
 
 @pytest.fixture
@@ -29,6 +41,9 @@ def dummy_settings() -> Settings:
         groq_api_key="test-groq-key",
         groq_stt_model="whisper-large-v3-turbo",
         groq_stt_language="hi",
+        tts_model="hi_IN-rohan-medium",
+        tts_sample_rate=22050,
+        tts_auto_download=False,
         log_level="DEBUG",
     )
 
@@ -64,21 +79,12 @@ def test_create_llm_with_openrouter(dummy_settings: Settings):
     assert llm_instance.model == dummy_settings.openrouter_model
 
 
-def test_create_tts_returns_temporary_stub():
-    """Verify TTS factory returns TemporaryStubTTS for Checkpoint 1."""
-    tts_instance = create_tts()
-    assert isinstance(tts_instance, TemporaryStubTTS)
+def test_create_tts_returns_piper_instance(dummy_settings: Settings):
+    """Verify TTS factory returns a PiperTTS adapter in Checkpoint 2."""
+    tts_instance = create_tts(dummy_settings)
+    assert isinstance(tts_instance, PiperTTS)
+    assert tts_instance.model_name == "hi_IN-rohan-medium"
     assert tts_instance.capabilities.streaming is False
-
-
-@pytest.mark.asyncio
-async def test_temporary_stub_tts_synthesis():
-    """Verify TemporaryStubTTS synthesizes a chunked stream without external API calls."""
-    tts_instance = TemporaryStubTTS()
-    stream = tts_instance.synthesize("Namaste, kaise hain aap?")
-    assert stream is not None
-    assert stream.input_text == "Namaste, kaise hain aap?"
-    await stream.aclose()
 
 
 def test_agent_server_instance():
@@ -91,7 +97,10 @@ async def test_agent_session_compatibility(dummy_settings: Settings):
     """Verify AgentSession can be composed with our STT, LLM, and TTS instances."""
     stt_inst = create_stt(dummy_settings)
     llm_inst = create_llm(dummy_settings)
-    tts_inst = create_tts()
+    tts_inst = PiperTTS(
+        voice_instance=MockPiperVoice(),
+        auto_download=False,
+    )
 
     session = AgentSession(
         stt=stt_inst,

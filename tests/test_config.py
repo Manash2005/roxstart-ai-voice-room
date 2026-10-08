@@ -45,6 +45,10 @@ def test_valid_settings_loading_with_defaults():
         assert settings.groq_api_key == "gsk_test123"
         assert settings.groq_stt_model == "whisper-large-v3-turbo"
         assert settings.groq_stt_language == "hi"
+        assert settings.tts_model == "hi_IN-rohan-medium"
+        assert settings.tts_sample_rate == 22050
+        assert settings.tts_device == "cpu"
+        assert settings.tts_auto_download is True
         assert settings.log_level == "INFO"
 
 
@@ -60,6 +64,10 @@ def test_settings_custom_overrides():
         "GROQ_API_KEY": "groq-key",
         "GROQ_STT_MODEL": "whisper-large-v3",
         "GROQ_STT_LANGUAGE": "hi-IN",
+        "TTS_MODEL": "hi_IN-pratham-medium",
+        "TTS_SAMPLE_RATE": "16000",
+        "TTS_DEVICE": "cpu",
+        "TTS_AUTO_DOWNLOAD": "false",
         "LOG_LEVEL": "DEBUG",
     }
     with patch.dict(os.environ, env, clear=True):
@@ -69,6 +77,9 @@ def test_settings_custom_overrides():
         assert settings.openrouter_base_url == "https://custom.openrouter.ai/api/v1"
         assert settings.groq_stt_model == "whisper-large-v3"
         assert settings.groq_stt_language == "hi-IN"
+        assert settings.tts_model == "hi_IN-pratham-medium"
+        assert settings.tts_sample_rate == 16000
+        assert settings.tts_auto_download is False
         assert settings.log_level == "DEBUG"
 
 

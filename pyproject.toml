@@ -1,13 +1,14 @@
 [project]
 name = "roxstar-ai-voice-room"
 version = "0.1.0"
-description = "Roxstar AI Voice Room Assistant - Checkpoint 1 Foundation"
+description = "Roxstar AI Voice Room Assistant - Checkpoint 2 Local Hindi/Hinglish TTS"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "livekit-agents>=1.8.0",
     "livekit-plugins-groq>=1.8.0",
     "livekit-plugins-openai>=1.8.0",
+    "piper-tts>=1.8.0",
     "python-dotenv>=1.0.0",
 ]
 

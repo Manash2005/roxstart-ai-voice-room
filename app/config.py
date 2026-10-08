@@ -45,6 +45,14 @@ class Settings:
     groq_stt_model: str = "whisper-large-v3-turbo"
     groq_stt_language: str = "hi"
 
+    # Local TTS configuration (Piper Hindi)
+    tts_model: str = "hi_IN-rohan-medium"
+    tts_model_path: str = ""
+    tts_config_path: str = ""
+    tts_device: str = "cpu"
+    tts_sample_rate: int = 22050
+    tts_auto_download: bool = True
+
     # Application settings
     log_level: str = "INFO"
 
@@ -114,6 +122,24 @@ class Settings:
             or "whisper-large-v3-turbo"
         )
         groq_stt_language = os.getenv("GROQ_STT_LANGUAGE", "hi").strip() or "hi"
+
+        # Local TTS parameters (Piper Hindi/Hinglish)
+        tts_model = (
+            os.getenv("TTS_MODEL", "hi_IN-rohan-medium").strip() or "hi_IN-rohan-medium"
+        )
+        tts_model_path = os.getenv("TTS_MODEL_PATH", "").strip()
+        tts_config_path = os.getenv("TTS_CONFIG_PATH", "").strip()
+        tts_device = os.getenv("TTS_DEVICE", "cpu").strip() or "cpu"
+
+        tts_sample_rate_str = os.getenv("TTS_SAMPLE_RATE", "22050").strip()
+        try:
+            tts_sample_rate = int(tts_sample_rate_str)
+        except ValueError:
+            tts_sample_rate = 22050
+
+        tts_auto_download_str = os.getenv("TTS_AUTO_DOWNLOAD", "true").strip().lower()
+        tts_auto_download = tts_auto_download_str not in ("0", "false", "no", "off")
+
         log_level = os.getenv("LOG_LEVEL", "INFO").strip() or "INFO"
 
         return cls(
@@ -126,6 +152,12 @@ class Settings:
             groq_api_key=groq_api_key,
             groq_stt_model=groq_stt_model,
             groq_stt_language=groq_stt_language,
+            tts_model=tts_model,
+            tts_model_path=tts_model_path,
+            tts_config_path=tts_config_path,
+            tts_device=tts_device,
+            tts_sample_rate=tts_sample_rate,
+            tts_auto_download=tts_auto_download,
             log_level=log_level,
         )
 

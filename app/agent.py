@@ -10,68 +10,27 @@ Checkpoint 1: Initial production-quality foundation using:
 from __future__ import annotations
 
 from livekit.agents import (
-    DEFAULT_API_CONNECT_OPTIONS,
     Agent,
     AgentServer,
     AgentSession,
-    APIConnectOptions,
     JobContext,
     cli,
     stt,
-    tts,
 )
 from livekit.plugins import groq, openai
 
 from app.config import Settings, get_settings
 from app.logging import get_logger, setup_logging
+from app.tts import create_tts
 
 logger = get_logger(__name__)
 
-# Default system instruction for the assistant in Checkpoint 1
+# Default system instruction for the assistant in Checkpoint 2
 DEFAULT_SYSTEM_INSTRUCTION = (
     "You are a helpful voice assistant. "
     "Understand Hindi, Hinglish, and English. "
     "Respond naturally and conversationally."
 )
-
-
-# ------------------------------------------------------------------------------
-# TTS Architecture (Deferred to Checkpoint 2)
-# ------------------------------------------------------------------------------
-class TemporaryStubTTS(tts.TTS):
-    """Temporary TTS adapter stub used during Checkpoint 1.
-
-    IMPORTANT:
-    - Paid TTS providers (e.g. OpenAI TTS) and LiveKit Inference TTS are strictly NOT used.
-    - Final TTS will be a ₹0-cost local/open-source model (e.g., Kokoro, XTTS, Bark).
-    - This adapter fulfills the LiveKit Agent pipeline requirements without incurring costs
-      or calling external paid services.
-    """
-
-    def __init__(self) -> None:
-        super().__init__(
-            capabilities=tts.TTSCapabilities(streaming=False),
-            sample_rate=24000,
-            num_channels=1,
-        )
-
-    def synthesize(
-        self,
-        text: str,
-        *,
-        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
-    ) -> tts.ChunkedStream:
-        return _TemporaryChunkedStream(
-            tts=self, input_text=text, conn_options=conn_options
-        )
-
-
-class _TemporaryChunkedStream(tts.ChunkedStream):
-    async def _run(self) -> None:
-        # Checkpoint 1 stub: audio synthesis is intentionally deferred to Checkpoint 2.
-        logger.debug(
-            "TemporaryStubTTS: synthesis deferred for text: '%s'", self.input_text
-        )
 
 
 # ------------------------------------------------------------------------------
@@ -106,15 +65,6 @@ def create_llm(settings: Settings) -> openai.LLM:
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
     )
-
-
-def create_tts() -> tts.TTS:
-    """Create the Text-To-Speech component.
-
-    In Checkpoint 1, returns the TemporaryStubTTS adapter.
-    Checkpoint 2 will replace this with a local/open-source Hindi TTS engine.
-    """
-    return TemporaryStubTTS()
 
 
 # ------------------------------------------------------------------------------
@@ -168,7 +118,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # 3. Initialize pipeline components
     stt_provider = create_stt(settings)
     llm_provider = create_llm(settings)
-    tts_provider = create_tts()
+    tts_provider = create_tts(settings)
 
     # 4. Agent: Initialize assistant persona and instructions
     assistant = VoiceAssistantAgent()
