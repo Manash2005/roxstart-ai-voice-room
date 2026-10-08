@@ -28,6 +28,7 @@ class Settings:
         groq_stt_model: Groq Whisper model name (default: 'whisper-large-v3-turbo').
         groq_stt_language: Initial STT language target (default: 'hi' for Hindi/Hinglish).
         log_level: Logging severity level (default: 'INFO').
+        active_persona: Active persona to instantiate ('dost' or 'sathi', default: 'dost').
     """
 
     # LiveKit credentials
@@ -55,6 +56,7 @@ class Settings:
 
     # Application settings
     log_level: str = "INFO"
+    active_persona: str = "dost"
 
     @classmethod
     def load(cls, env_path: Path | str | None = None) -> Settings:
@@ -142,6 +144,13 @@ class Settings:
 
         log_level = os.getenv("LOG_LEVEL", "INFO").strip() or "INFO"
 
+        active_persona = os.getenv("ACTIVE_PERSONA", "dost").strip().lower() or "dost"
+        if active_persona not in ("dost", "sathi"):
+            raise ConfigurationError(
+                f"Invalid ACTIVE_PERSONA: '{active_persona}'. "
+                "Must be either 'dost' or 'sathi'."
+            )
+
         return cls(
             livekit_url=livekit_url,
             livekit_api_key=livekit_api_key,
@@ -159,6 +168,7 @@ class Settings:
             tts_sample_rate=tts_sample_rate,
             tts_auto_download=tts_auto_download,
             log_level=log_level,
+            active_persona=active_persona,
         )
 
 

@@ -54,6 +54,8 @@ class AIDost(Agent):
     for the AI Dost assistant in the LiveKit voice room.
     """
 
+    greeting: str = AI_DOST_GREETING
+
     def __init__(
         self,
         instructions: str = AI_DOST_INSTRUCTIONS,

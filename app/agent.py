@@ -26,12 +26,13 @@ from app.personas import (
     AI_DOST_GREETING,
     AI_DOST_INSTRUCTIONS,
     AIDost,
+    create_agent,
 )
 from app.tts import create_tts
 
 logger = get_logger(__name__)
 
-# Backward-compatible aliases for Checkpoint 1 & 2 references
+# Backward-compatible aliases for Checkpoint 1, 2 & 3 references
 VoiceAssistantAgent = AIDost
 DEFAULT_SYSTEM_INSTRUCTION = AI_DOST_INSTRUCTIONS
 
@@ -108,8 +109,9 @@ async def entrypoint(ctx: JobContext) -> None:
     llm_provider = create_llm(settings)
     tts_provider = create_tts(settings)
 
-    # 4. Agent: Initialize AI Dost participant persona
-    assistant = AIDost()
+    # 4. Agent: Initialize active participant persona based on settings
+    assistant = create_agent(settings.active_persona)
+    persona_name = assistant.__class__.__name__
 
     # 5. AgentSession: Realtime voice session orchestrating media streams and models
     session = AgentSession(
@@ -119,13 +121,14 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     # 6. session.start(): Attach the agent to the room audio/video streams
-    logger.info("Starting AI Dost voice session...")
+    logger.info("Starting %s voice session...", persona_name)
     await session.start(agent=assistant, room=ctx.room)
-    logger.info("AI Dost session active in room '%s'", ctx.room.name)
+    logger.info("%s session active in room '%s'", persona_name, ctx.room.name)
 
-    # 7. Automatic Greeting: Speak AI Dost's warm introductory greeting
+    # 7. Automatic Greeting: Speak the persona's introductory greeting
+    greeting = getattr(assistant, "greeting", AI_DOST_GREETING)
     try:
-        await session.say(AI_DOST_GREETING)
+        await session.say(greeting)
     except (RuntimeError, TimeoutError, asyncio.CancelledError) as e:
         logger.debug("Initial greeting skipped or cancelled: %s", e)
 
@@ -141,7 +144,10 @@ def main() -> None:
 
     settings = get_settings()
     setup_logging(settings.log_level)
-    logger.info("Starting Roxstar AI Voice Room Assistant (Checkpoint 3 - AI Dost)...")
+    logger.info(
+        "Starting Roxstar AI Voice Room Assistant (Checkpoint 4 - %s)...",
+        settings.active_persona,
+    )
 
     # agents.cli.run_app: Standard LiveKit CLI runner supporting 'dev', 'start', etc.
     cli.run_app(server)

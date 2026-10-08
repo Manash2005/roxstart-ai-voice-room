@@ -9,11 +9,13 @@ from livekit.plugins import groq, openai
 from app.agent import (
     DEFAULT_SYSTEM_INSTRUCTION,
     VoiceAssistantAgent,
+    create_agent,
     create_llm,
     create_stt,
     server,
 )
 from app.config import Settings
+from app.personas import AIDost, AISathi
 from app.tts import PiperTTS, create_tts
 
 
@@ -111,3 +113,28 @@ async def test_agent_session_compatibility(dummy_settings: Settings):
     assert session.stt is stt_inst
     assert session.tts is tts_inst
     await session.aclose()
+
+
+def test_create_agent_based_on_settings():
+    """Verify that create_agent instantiates AIDost or AISathi according to settings."""
+    settings_dost = Settings(
+        livekit_url="wss://test.livekit.cloud",
+        livekit_api_key="k",
+        livekit_api_secret="s",
+        openrouter_api_key="ok",
+        groq_api_key="gk",
+        active_persona="dost",
+    )
+    agent_dost = create_agent(settings_dost.active_persona)
+    assert isinstance(agent_dost, AIDost)
+
+    settings_sathi = Settings(
+        livekit_url="wss://test.livekit.cloud",
+        livekit_api_key="k",
+        livekit_api_secret="s",
+        openrouter_api_key="ok",
+        groq_api_key="gk",
+        active_persona="sathi",
+    )
+    agent_sathi = create_agent(settings_sathi.active_persona)
+    assert isinstance(agent_sathi, AISathi)

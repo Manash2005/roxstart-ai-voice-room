@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from app.config import Settings
-from app.personas import AI_DOST_GREETING
+from app.personas import AI_DOST_GREETING, AI_SATHI_GREETING
 from app.tts import create_tts
 
 TEST_CASES = [
@@ -41,12 +41,16 @@ TEST_CASES = [
         "AI Dost Greeting",
         AI_DOST_GREETING,
     ),
+    (
+        "AI Sathi Greeting",
+        AI_SATHI_GREETING,
+    ),
 ]
 
 
 async def run_smoke_test() -> None:
     print("=" * 70)
-    print("ROXSTAR AI VOICE ROOM - TTS SMOKE TEST (Checkpoint 2)")
+    print("ROXSTAR AI VOICE ROOM - TTS SMOKE TEST (Checkpoint 4)")
     print("=" * 70)
 
     # Use default settings with local model

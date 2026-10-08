@@ -50,6 +50,7 @@ def test_valid_settings_loading_with_defaults():
         assert settings.tts_device == "cpu"
         assert settings.tts_auto_download is True
         assert settings.log_level == "INFO"
+        assert settings.active_persona == "dost"
 
 
 def test_settings_custom_overrides():
@@ -69,6 +70,7 @@ def test_settings_custom_overrides():
         "TTS_DEVICE": "cpu",
         "TTS_AUTO_DOWNLOAD": "false",
         "LOG_LEVEL": "DEBUG",
+        "ACTIVE_PERSONA": "sathi",
     }
     with patch.dict(os.environ, env, clear=True):
         settings = Settings.load()
@@ -81,6 +83,24 @@ def test_settings_custom_overrides():
         assert settings.tts_sample_rate == 16000
         assert settings.tts_auto_download is False
         assert settings.log_level == "DEBUG"
+        assert settings.active_persona == "sathi"
+
+
+def test_invalid_active_persona_raises_configuration_error():
+    """Verify that an unsupported ACTIVE_PERSONA value raises ConfigurationError."""
+    env = {
+        "LIVEKIT_URL": "wss://test.livekit.cloud",
+        "LIVEKIT_API_KEY": "k",
+        "LIVEKIT_API_SECRET": "s",
+        "OPENROUTER_API_KEY": "or-k",
+        "GROQ_API_KEY": "g-k",
+        "ACTIVE_PERSONA": "unsupported_robot",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ConfigurationError) as exc_info:
+            Settings.load()
+        assert "Invalid ACTIVE_PERSONA" in str(exc_info.value)
+        assert "unsupported_robot" in str(exc_info.value)
 
 
 def test_get_settings_caching_and_reload():
