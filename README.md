@@ -7,21 +7,24 @@ A production-quality Python realtime voice assistant project built for the Roxst
 This project provides an AI Voice Room Assistant designed to participate in multi-user voice rooms, understand bilingual/code-mixed speech (Hindi, Hinglish, and English), and respond naturally and conversationally. The project is constructed incrementally across distinct checkpoints, adhering strictly to a **₹0-cost** architecture utilizing free tiers and open-source models.
 
 ---
+## 2. Current Checkpoint: Checkpoint 5 (Two-Bot Orchestration Layer)
 
-## 2. Current Checkpoint: Checkpoint 4 (Second Complete AI Participant — AI Sathi)
+**Checkpoint 5** introduces the central two-bot orchestration layer, allowing **AI Dost** and **AI Sathi** to logically coexist within the same LiveKit room without speech collision, duplicate turns, or multiple concurrent STT/LLM sessions.
 
-**Checkpoint 4** introduces the second complete, fully interactive conversational AI participant: **AI Sathi**.
-
-- **Persona Profile:** Intelligent, calm, analytical, composed, warm, and professional but approachable. She feels like a smart, patient female colleague or knowledgeable peer who explains complex topics with precision and clarity.
-- **Distinction from AI Dost:**
-  - **AI Dost (`ACTIVE_PERSONA=dost`):** Friendly, brotherly, casual, buddy-like. Simplifies ideas through everyday colloquial analogies (*"Dekho, index ko tum database ki shortcut list samajh lo..."*).
-  - **AI Sathi (`ACTIVE_PERSONA=sathi`):** Calm, analytical, composed, and structured. Focuses on clarity, logical trade-offs, and step-by-step reasoning (*"Simple way mein, database index ek shortcut hai jo query ko relevant rows tak faster pahunchne mein help karta hai..."*).
-- **Independent Agent Architecture:** Reuses the existing STT, LLM, TTS, VAD, and configuration pipeline without duplicating infrastructure code.
-- **Active Persona Selection:** Configurable via `ACTIVE_PERSONA=dost` or `ACTIVE_PERSONA=sathi` in `.env` (or environment variables).
-- **Spoken Greetings:**
-  - **AI Dost:** *"Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"*
-  - **AI Sathi:** *"Namaste! Main Sathi hoon. Bataiye, aaj kis cheez ko simple bana kar samjhein?"*
-- **Spoken Voice & TTS Optimization:** Both agents enforce 1–4 short spoken sentences, strictly avoiding emojis, markdown tables, bullet points, and AI clichés (*"As an AI language model..."*).
+- **Logical Coexistence:** Both AI participants are represented in the same room. A central orchestrator receives each user utterance and dynamically assigns turn ownership.
+- **Priority-Based Turn Routing ([app/routing/router.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/router.py)):**
+  1. **Priority 1 — Explicit Bot Addressing:** Utterances explicitly naming *"Dost"*, *"AI Dost"*, *"Bhai Dost"* route to Dost; utterances naming *"Sathi"*, *"AI Sathi"*, *"Sathi ji"* route to Sathi. Explicit addressing always overrides topic classification.
+  2. **Priority 2 — Conversation Ownership:** Follow-up questions (*"Aur Kubernetes?"*, *"Simple batao"*, *"Why?"*, *"Isme kya problem hai?"*, *"Aur iska alternative?"*) maintain context and stay with the currently active bot.
+  3. **Priority 3 — Topic/Intent Classification:** Technical comparisons (*"difference"*, *"compare"*, *"vs"*, *"trade-off"*, *"architecture"*) route to AI Sathi; casual conversation, mood check-ins, or buddy banter route to AI Dost.
+  4. **Priority 4 — Deterministic Default Fallback:** Queries without explicit addressing or analytical intent default deterministically to AI Dost.
+- **Mutual Exclusion & Arbitration ([app/routing/arbitrator.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/arbitrator.py)):**
+  - An asyncio-safe `ResponseArbitrator` guarantees that at most ONE bot speaks at any time.
+  - If Dost is speaking, Sathi cannot start; if Sathi is speaking, Dost cannot start.
+  - When speech generation concludes, the lock is released cleanly.
+- **LiveKit Room Participant Identity:**
+  - The LiveKit participant name is dynamically updated (`set_name("AI Dost")` vs `set_name("AI Sathi")`) and metadata attributes (`set_attributes({"active_bot": "ai-dost", "available_bots": "ai-dost,ai-sathi"})`) reflect the active responder in real-time.
+- **Controlled Collaborative Addressing ("Both Bots"):**
+  - For questions addressing both bots (*"Both of you, what do you think?"*), the router defaults to AI Dost with reason `collaborative_deferred`, preventing uncoordinated double speech. Full sequential multi-bot dialogue is deferred.
 
 ---
 
@@ -33,8 +36,11 @@ This project provides an AI Voice Room Assistant designed to participate in mult
 - **LLM (Language Model):** [OpenRouter](https://openrouter.ai/) (default: `openrouter/free`) via `livekit-plugins-openai`
 - **VAD (Voice Activity Detection):** Silero VAD (local open-source inference bundled with LiveKit Agents)
 - **TTS (Text-to-Speech):** [Piper TTS](https://github.com/rhasspy/piper) (`hi_IN-rohan-medium` ONNX model, trained on IIT Madras Indic TTS dataset)
+- **Orchestration Layer:**
+  - `TwoBotOrchestrator` ([app/routing/orchestrator.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/orchestrator.py))
+  - `TurnRouter` ([app/routing/router.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/router.py))
+  - `ResponseArbitrator` ([app/routing/arbitrator.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/routing/arbitrator.py))
 - **Personas:** `AIDost` ([app/personas/dost.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/personas/dost.py)) and `AISathi` ([app/personas/sathi.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/personas/sathi.py))
-- **Persona Factory:** `create_agent(persona)` in [app/personas/\_\_init\_\_.py](file:///Users/manashswain/Projects/roxstart-ai-voice-room/app/personas/__init__.py)
 - **Dependency Management:** `uv`
 - **Configuration:** Typed `Settings` class with `python-dotenv`
 - **Testing:** `pytest` & `pytest-asyncio`
@@ -50,57 +56,59 @@ After evaluating multiple candidate models, **Piper TTS** with the `hi_IN-rohan-
 1. **Native Indian Voice Quality:** Trained on high-quality voice data from the **IIT Madras Indic TTS** project, yielding a natural Indian accent and authentic Hindi cadence.
 2. **Compact Model Footprint:** The ONNX model is only **~62.9 MB** (plus ~5 KB config), allowing instant on-demand download and minimal disk utilization.
 3. **Ultra-Low Memory Footprint:** Consumes **~100 MB of RAM**, fitting comfortably on any developer laptop or MacBook with limited memory.
-4. **Sub-100ms Inference on Apple Silicon:** Operates natively via `onnxruntime` on CPU / Apple Silicon without requiring CUDA or GPU acceleration. Measured Real-Time Factor (RTF) is **0.03x – 0.05x** (e.g. synthesizing 7 seconds of speech takes ~350ms).
+4. **Sub-100ms Inference on Apple Silicon:** Operates natively via `onnxruntime` on CPU / Apple Silicon without requiring CUDA or GPU acceleration. Measured Real-Time Factor (RTF) is **0.02x – 0.17x**.
 5. **Python 3.12 Compatibility:** Installs cleanly as a standard wheel without conflicting with LiveKit's dependencies or requiring a secondary Python environment.
 6. **Permissive License:** Open-source under MIT / Open Data licenses, appropriate for production and assignment evaluation.
 7. **Bilingual / Code-Mixed Support:** The underlying `espeak-ng` phonemization pipeline natively accepts Devanagari script, Romanized Hindi, and English words.
 
-### Alternatives Evaluated
-
-| Model Candidate | Size | Runtime / Device | Python Compatibility | Evaluation Outcome |
-| :--- | :--- | :--- | :--- | :--- |
-| **IndicF5 (AI4Bharat)** | 1.5 – 2.5 GB | PyTorch Diffusion (CUDA-optimized) | Python 3.10 recommended | **Rejected:** Requires 32 ODE steps per sentence, resulting in 15–30s generation latency on CPU. Requires a reference audio clip + transcript for zero-shot cloning. |
-| **Meta MMS-TTS Hindi (`facebook/mms-tts-hin`)** | ~140 MB | PyTorch VITS (CPU/MPS) | Python 3.12 compatible | **Rejected:** Vocabulary strictly restricted to Devanagari characters (72 tokens). Fails on Roman Hindi or Hinglish code-mixed text with `<unk>` tokens. |
-| **Kokoro-82M (ONNX)** | ~300 MB | ONNX Runtime | Python 3.12 compatible | **Deferred:** Exceptional English/multilingual synthesizer, but Hindi voice support is community-experimental and lacks native Indic-trained intonation compared to IIT Madras datasets. |
-| **Piper TTS (`hi_IN-rohan-medium`)** | **~63 MB** | **ONNX Runtime (CPU/Mac)** | **Python 3.12 compatible** | **SELECTED:** Instant startup, <100ms latency, native Indic cadence, handles Devanagari and Romanized text. |
-
 ### Current Voice Identity & Limitation Note
 
 > [!NOTE]
-> **Voice Status for Checkpoint 4:**
-> Both AI Dost and AI Sathi currently share the local `hi_IN-rohan-medium` Piper ONNX voice model.
-> Female voice selection is intentionally deferred to the voice-selection/orchestration refinement once a compatible, high-quality local Hindi voice is verified without adding cost or cloud dependencies. Do not claim that the current voice is female.
+> **Voice Status for Checkpoint 5:**
+> Both AI Dost and AI Sathi synthesize audio through the verified local `hi_IN-rohan-medium` Piper ONNX voice model.
+> Female voice timbre differentiation is intentionally deferred to the voice-selection refinement once a compatible, high-quality local Hindi female ONNX voice is verified without adding cost or cloud dependencies.
 
 ---
 
-## 5. LiveKit Agents & Persona Architecture
+## 5. LiveKit Agents & Orchestration Architecture
 
-The architecture maintains strict separation of concerns, keeping `app/agent.py` clean and beginner-friendly:
+The central two-bot orchestration layer ensures a single STT/LLM stream while dynamically arbitrating persona execution:
 
 ```text
 LiveKit Room (WebRTC Audio Stream)
-       ↓
-LiveKit Agent Worker (AgentServer)
-       ↓
+       │
+       ▼
 JobContext (Room connection & lifecycle)
-       ↓
-AgentSession (STT: Groq Whisper, LLM: OpenRouter Free, TTS: Piper Local, VAD: Silero)
-       ↓
-create_agent(settings.active_persona)
-   ├── "dost"  → AIDost (Warm, brotherly buddy persona)
-   └── "sathi" → AISathi (Calm, analytical, structured persona)
-       ↓
-Spoken Greeting:
-   • Dost:  "Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"
-   • Sathi: "Namaste! Main Sathi hoon. Bataiye, aaj kis cheez ko simple bana kar samjhein?"
+       │
+       ▼
+AgentSession (Single Groq STT, Single OpenRouter LLM, Single Piper TTS)
+       │
+       ▼
+TwoBotOrchestrator (app/routing/orchestrator.py)
+       │
+       ├── TurnRouter (app/routing/router.py)
+       │     ├── 1. Explicit Address: "Dost..." / "Sathi..."
+       │     ├── 2. Conversation Owner: Follow-up continuations
+       │     ├── 3. Topic Classifier: Comparison vs Casual
+       │     └── 4. Deterministic Default: AI Dost
+       │
+       ├── ResponseArbitrator (app/routing/arbitrator.py)
+       │     └── Asyncio Mutex: Prevents simultaneous speech turns
+       │
+       ├── ChatContext Instructions Injection:
+       │     ├── If Dost: AI_DOST_INSTRUCTIONS (app/personas/dost.py)
+       │     └── If Sathi: AI_SATHI_INSTRUCTIONS (app/personas/sathi.py)
+       │
+       └── Dynamic Room Identity Update:
+             └── local_participant.set_name("AI Dost" / "AI Sathi")
 ```
 
 ### Key Technical Details
 
-- **Clean Persona Abstraction:** `AIDost` and `AISathi` inherit from LiveKit's `Agent` class and encapsulate their respective system prompts. Adding or updating personas requires zero changes to the underlying STT, TTS, or RTC networking logic.
-- **Factory Selection:** `create_agent(settings.active_persona)` instantiates the requested persona based on `ACTIVE_PERSONA` in `.env`.
-- **Automatic Spoken Greeting:** Upon connection, `await session.say(assistant.greeting)` delivers the opening spoken turn and synchronizes it into session history.
-- **Sentence-Level Chunking & Emitting:** Synthesized 16-bit mono PCM audio (22,050 Hz) is emitted to LiveKit's `AudioEmitter(mime_type="audio/pcm")`, with streaming LLM text split on sentence boundaries via `tokenize.blingfire.SentenceTokenizer`.
+- **Single Audio Pipeline:** A single `AgentSession` manages room audio, preventing redundant STT transcripts, duplicate audio tracks, or race conditions.
+- **Dynamic System Prompt Swapping:** In `on_user_turn_completed`, the orchestrator injects the routed persona's system prompt into the turn's `ChatContext` using `update_instructions`, ensuring the LLM generates in character.
+- **Mutual Exclusion Lock:** `arbitrator.acquire()` locks speech generation for the active bot; if locked, incoming overlapping turns raise `StopResponse()`.
+- **Automatic Turn Release:** When speech concludes (`AgentStateChangedEvent` transitions to `idle`/`listening`), `arbitrator.release()` unlocks the turn.
 
 ---
 
@@ -110,54 +118,46 @@ The implementation was validated against six core categories via `scripts/tts_sm
 
 | Test Category | Test Input | Audio Duration | Inference Time | Real-Time Factor (RTF) | Quality / Intonation Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **AI Sathi Greeting** | `"Namaste! Main Sathi hoon. Bataiye, aaj kis cheez ko simple bana kar samjhein?"` | 7.07s | 0.347s | 0.05x | Composed, clear Indian cadence; synthesized smoothly. |
-| **AI Dost Greeting** | `"Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"` | 6.06s | 0.302s | 0.05x | Warm, conversational greeting; natural pace. |
-| **Hindi Devanagari** | `"नमस्ते! आज आप कैसे हैं?"` | 2.94s | 0.850s | 0.29x | Authentic Hindi pronunciation and inflection. |
-| **Roman Hindi** | `"Aaj kya kar rahe ho?"` | 1.75s | 0.068s | 0.04x | Clear conversational Hindi intonation. |
-| **Hinglish** | `"Haan, basically iska main idea ye hai ki hum context maintain karte hain."` | 5.73s | 0.294s | 0.05x | Fluid transition between Hindi verbs and English technical nouns. |
-| **English** | `"Can you explain this in simple terms?"` | 2.76s | 0.135s | 0.05x | Clear Indian-accented English pronunciation. |
+| **AI Sathi Greeting** | `"Namaste! Main Sathi hoon. Bataiye, aaj kis cheez ko simple bana kar samjhein?"` | 6.81s | 0.163s | 0.02x | Composed, clear Indian cadence; synthesized smoothly. |
+| **AI Dost Greeting** | `"Namaste! Main Dost hoon. Batao, aaj kis cheez mein help chahiye?"` | 5.85s | 0.142s | 0.02x | Warm, conversational greeting; natural pace. |
+| **Hindi Devanagari** | `"नमस्ते! आज आप कैसे हैं?"` | 2.89s | 0.488s | 0.17x | Authentic Hindi pronunciation and inflection. |
+| **Roman Hindi** | `"Aaj kya kar rahe ho?"` | 1.82s | 0.093s | 0.05x | Clear conversational Hindi intonation. |
+| **Hinglish** | `"Haan, basically iska main idea ye hai ki hum context maintain karte hain."` | 5.73s | 0.149s | 0.03x | Fluid transition between Hindi verbs and English technical nouns. |
+| **English** | `"Can you explain this in simple terms?"` | 2.67s | 0.070s | 0.03x | Clear Indian-accented English pronunciation. |
 
 ---
 
-## 7. Manual Test Scenarios
+## 7. Checkpoint 5 Manual Test Scenarios
 
-### Part A: AI Sathi Scenarios (`ACTIVE_PERSONA=sathi`)
+The following 7 scenarios validate two-bot turn routing, explicit addressing, follow-up ownership, and arbitration:
 
-#### TEST 1 — Hindi Explanation
-- **User Prompt:** `"Mujhe batao authentication kya hoti hai?"`
-- **Expected Sathi Behavior:** Clear conversational Hindi/Hinglish explanation in 2–3 short spoken sentences. Explains that authentication is the identity verification check (checking who the user is) before granting access.
+### Scenario 1 — Explicit Dost Addressing
+- **User Prompt:** `"Dost, explain Docker."`
+- **Expected Route:** Only AI Dost responds (`reason="explicit_address"`, `confidence=1.0`). Friendly, colloquial analogy.
 
-#### TEST 2 — English Inquiry
-- **User Prompt:** `"Can you explain what database indexing is?"`
-- **Expected Sathi Behavior:** Responds in natural English. Explains that a database index is a data structure (like a book's index) that lets the database locate rows directly without scanning the whole table.
+### Scenario 2 — Explicit Sathi Addressing
+- **User Prompt:** `"Sathi, compare Docker and Kubernetes."`
+- **Expected Route:** Only AI Sathi responds (`reason="explicit_address"`, `confidence=1.0`). Structured architectural comparison.
 
-#### TEST 3 — Hinglish Technical Distinction
-- **User Prompt:** `"Redis aur database mein actual difference kya hai?"`
-- **Expected Sathi Behavior:** Precise Hinglish response: explains that databases store data persistently on disk, while Redis keeps data in RAM for sub-millisecond fast access (used for caching and sessions).
+### Scenario 3 — General Question (Default Fallback)
+- **User Prompt:** `"Docker kya hota hai?"`
+- **Expected Route:** Unaddressed general question routes deterministically to AI Dost (`reason="general_default"`, `confidence=0.5`).
 
-#### TEST 4 — Comparison & Trade-Offs
-- **User Prompt:** `"REST aur GraphQL mein kaunsa better hai?"`
-- **Expected Sathi Behavior:** Avoids declaring a simplistic winner; clarifies the trade-off. Explains that REST is standard, simple, and great for caching, while GraphQL prevents over-fetching and allows clients to request exact fields.
+### Scenario 4 — Technical Comparison Query
+- **User Prompt:** `"REST aur GraphQL mein kya difference hai?"`
+- **Expected Route:** Unaddressed comparison routes to AI Sathi (`reason="technical_comparison"`, `confidence=0.75`).
 
-#### TEST 5 — Multi-Turn Follow-Up (Context Maintenance)
-- **Turn 1:** `"Docker kya hai?"`
-- **Turn 2:** `"Kubernetes?"`
-- **Turn 3:** `"Simple difference batao."`
-- **Expected Sathi Behavior:** Retains multi-turn context across all turns. In Turn 3, concisely contrasts Docker (creating and running individual containers) with Kubernetes (orchestrating and managing multiple containers across clusters).
+### Scenario 5 — Follow-Up Continuity (Sathi Ownership)
+- **Turn 1:** `"Sathi, explain Redis."` -> Sathi responds (`explicit_address`).
+- **Turn 2:** `"Aur iska use case?"` -> Sathi handles the follow-up turn (`reason="conversation_owner"`, `confidence=0.85`).
 
-#### TEST 6 — Casual / Emotional Conversation
-- **User Prompt:** `"Aaj thoda stress hai."`
-- **Expected Sathi Behavior:** Calm, warm, and supportive response. Acknowledges stress gently (*"Aap thoda relax ho jaiye. Kya chal raha hai, agar share karna chahein toh bataiye?"*). Strictly avoids robotic disclaimers or turning the moment into a technical lecture.
+### Scenario 6 — Follow-Up Continuity (Dost Ownership)
+- **Turn 1:** `"Dost, explain API."` -> Dost responds (`explicit_address`).
+- **Turn 2:** `"Simple example do."` -> Dost handles the follow-up turn (`reason="conversation_owner"`, `confidence=0.85`).
 
----
-
-### Part B: AI Dost Scenarios (`ACTIVE_PERSONA=dost`)
-
-- **TEST 1 — Hindi:** `"Bhai mujhe batao API kya hoti hai?"` -> Friendly brotherly explanation via restaurant waiter analogy.
-- **TEST 2 — English:** `"Can you explain what an API is?"` -> Approaches in warm, clear conversational English.
-- **TEST 3 — Hinglish:** `"Bhai backend mein authentication kaise kaam karta hai?"` -> Explains credentials, tokens, and sessions in Hinglish.
-- **TEST 4 — Follow-up:** `"Docker kya hai?"` -> `"Aur Kubernetes?"` -> `"Simple language mein difference batao."` -> Compares container box and ship captain.
-- **TEST 5 — Casual:** `"Aaj mood thoda kharab hai."` -> Empathic, supportive buddy response.
+### Scenario 7 — Collaborative Addressing
+- **User Prompt:** `"Both of you, what do you think?"`
+- **Expected Route:** Handled safely by AI Dost (`reason="collaborative_deferred"`). Controlled sequential speech prevents simultaneous overlap.
 
 ---
 
@@ -170,7 +170,7 @@ The implementation was validated against six core categories via `scripts/tts_sm
 | **LLM** | OpenRouter (`openrouter/free`) | ₹0 | Free-tier models accessed via standard API keys. |
 | **VAD** | Silero VAD (local ONNX/Inference) | ₹0 | Runs locally on CPU, no external network requests. |
 | **TTS** | Piper TTS (`hi_IN-rohan-medium`) | **₹0** | **Runs 100% locally on CPU / Apple Silicon. No API keys.** |
-| **Personas** | AI Dost & AI Sathi | ₹0 | Clean in-memory prompt and agent architecture. |
+| **Turn Orchestration** | Local TurnRouter & ResponseArbitrator | ₹0 | In-memory Python routing and mutual exclusion. |
 | **Paid Services** | LiveKit Inference / OpenAI Paid API / ElevenLabs | **NONE** | **Strictly prohibited & omitted.** |
 
 ---
@@ -217,8 +217,8 @@ TTS_DEVICE=cpu
 TTS_SAMPLE_RATE=22050
 TTS_AUTO_DOWNLOAD=true
 
-# Active Agent Persona for Checkpoint 4 ("dost" or "sathi")
-ACTIVE_PERSONA=sathi
+# Default Agent Persona ("dost" or "sathi")
+ACTIVE_PERSONA=dost
 
 # Logging
 LOG_LEVEL=INFO
@@ -233,7 +233,7 @@ LOG_LEVEL=INFO
 uv run python scripts/tts_smoke_test.py
 ```
 
-### Run Fast Unit Tests (37 tests)
+### Run Full Fast Unit Test Suite (58 tests)
 ```bash
 uv run pytest -v
 ```
@@ -244,32 +244,27 @@ uvx ruff check .
 uvx ruff format --check .
 ```
 
-### Run the LiveKit Agent with AI Sathi
+### Run the LiveKit Agent in Two-Bot Orchestration Mode
 ```bash
-ACTIVE_PERSONA=sathi uv run python -m app.agent dev
+uv run python -m app.agent dev
 ```
 
-### Run the LiveKit Agent with AI Dost
+### Run in Interactive Console Mode
 ```bash
-ACTIVE_PERSONA=dost uv run python -m app.agent dev
-```
-
-### Run in Console Mode
-```bash
-ACTIVE_PERSONA=sathi uv run python -m app.agent console
+uv run python -m app.agent console
 ```
 
 ---
 
 ## 11. What Has NOT Been Implemented Yet (Deferred to Later Checkpoints)
 
-To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 4:
-- **Two-Bot Turn Routing & Arbitration:** Automatic router, bot handoff, or turn mediator (deferred to **Checkpoint 5**).
-- **Two Bots Running Simultaneously in the Same Room:** Multi-agent co-presence and arbitration.
+To adhere to incremental checkpoint development, the following features remain out of scope for Checkpoint 5:
 - **Persistent Database Memory / Vector Store / RAG:** External storage, SQLite/PostgreSQL, ChromaDB/Pinecone deferred.
-- **Speaker Diarization / Multi-User Profiling:** Recognizing specific individual user identities.
+- **Speaker Identification / Diarization:** Distinguishing different human participants by name/voice fingerprint.
 - **Custom Interruption Orchestration:** Advanced interruption arbitration policies beyond standard Silero VAD barge-in.
 - **Frontend Web / Mobile App:** LiveKit client interface for end users.
 - **Function Calling / Tools:** External API tools (weather, time, web search).
+- **Docker & Deployment Infrastructure:** Containerization and cloud deployment.
+ tools (weather, time, web search).
 - **Docker & Deployment Infrastructure:** Containerization and cloud deployment.
 

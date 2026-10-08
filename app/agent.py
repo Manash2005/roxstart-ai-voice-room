@@ -14,6 +14,7 @@ import asyncio
 from livekit.agents import (
     AgentServer,
     AgentSession,
+    AgentStateChangedEvent,
     JobContext,
     cli,
     stt,
@@ -25,16 +26,28 @@ from app.logging import get_logger, setup_logging
 from app.personas import (
     AI_DOST_GREETING,
     AI_DOST_INSTRUCTIONS,
-    AIDost,
+    AI_SATHI_GREETING,
     create_agent,
 )
+from app.routing import BotTarget, TwoBotOrchestrator
 from app.tts import create_tts
 
 logger = get_logger(__name__)
 
-# Backward-compatible aliases for Checkpoint 1, 2 & 3 references
-VoiceAssistantAgent = AIDost
+# Backward-compatible aliases for prior checkpoint references
+VoiceAssistantAgent = TwoBotOrchestrator
 DEFAULT_SYSTEM_INSTRUCTION = AI_DOST_INSTRUCTIONS
+
+__all__ = [
+    "DEFAULT_SYSTEM_INSTRUCTION",
+    "VoiceAssistantAgent",
+    "create_agent",
+    "create_llm",
+    "create_stt",
+    "entrypoint",
+    "main",
+    "server",
+]
 
 
 # ------------------------------------------------------------------------------
@@ -109,9 +122,14 @@ async def entrypoint(ctx: JobContext) -> None:
     llm_provider = create_llm(settings)
     tts_provider = create_tts(settings)
 
-    # 4. Agent: Initialize active participant persona based on settings
-    assistant = create_agent(settings.active_persona)
-    persona_name = assistant.__class__.__name__
+    # 4. Agent: Initialize central TwoBotOrchestrator for AI Dost and AI Sathi
+    default_target: BotTarget = (
+        "sathi" if settings.active_persona == "sathi" else "dost"
+    )
+    orchestrator = TwoBotOrchestrator(
+        room=ctx.room,
+        default_target=default_target,
+    )
 
     # 5. AgentSession: Realtime voice session orchestrating media streams and models
     session = AgentSession(
@@ -120,13 +138,37 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=tts_provider,
     )
 
-    # 6. session.start(): Attach the agent to the room audio/video streams
-    logger.info("Starting %s voice session...", persona_name)
-    await session.start(agent=assistant, room=ctx.room)
-    logger.info("%s session active in room '%s'", persona_name, ctx.room.name)
+    # Attach state change listener to release turn arbitration lock when speech concludes
+    @session.on("agent_state_changed")
+    def _on_state_changed(ev: AgentStateChangedEvent) -> None:
+        if (
+            ev.new_state in ("idle", "listening")
+            and orchestrator.arbitrator.is_responding
+        ):
+            owner = orchestrator.arbitrator.current_owner or orchestrator.active_bot
+            logger.info("Speech turn ended for %s; releasing arbitration lock", owner)
+            orchestrator.arbitrator.release(owner)
 
-    # 7. Automatic Greeting: Speak the persona's introductory greeting
-    greeting = getattr(assistant, "greeting", AI_DOST_GREETING)
+    # 6. session.start(): Attach orchestrator to the room audio/video streams
+    logger.info("Starting two-bot voice room session (AI Dost & AI Sathi)...")
+    await session.start(agent=orchestrator, room=ctx.room)
+    logger.info("Two-bot voice room session active in room '%s'", ctx.room.name)
+
+    # Setup initial participant identity and attributes
+    if ctx.room and ctx.room.local_participant:
+        try:
+            await ctx.room.local_participant.set_name("AI Dost & AI Sathi")
+            await ctx.room.local_participant.set_attributes(
+                {
+                    "available_bots": "ai-dost,ai-sathi",
+                    "active_bot": f"ai-{default_target}",
+                }
+            )
+        except (RuntimeError, TimeoutError, asyncio.CancelledError) as e:
+            logger.debug("Initial participant identity setup skipped: %s", e)
+
+    # 7. Automatic Greeting: Speak opening greeting (Dost by default, or Sathi if configured)
+    greeting = AI_SATHI_GREETING if default_target == "sathi" else AI_DOST_GREETING
     try:
         await session.say(greeting)
     except (RuntimeError, TimeoutError, asyncio.CancelledError) as e:
@@ -145,8 +187,7 @@ def main() -> None:
     settings = get_settings()
     setup_logging(settings.log_level)
     logger.info(
-        "Starting Roxstar AI Voice Room Assistant (Checkpoint 4 - %s)...",
-        settings.active_persona,
+        "Starting Roxstar AI Voice Room Assistant (Checkpoint 5 - Two-Bot Orchestrator)..."
     )
 
     # agents.cli.run_app: Standard LiveKit CLI runner supporting 'dev', 'start', etc.
