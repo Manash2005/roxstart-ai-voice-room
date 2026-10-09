@@ -10,6 +10,10 @@ Checkpoint 1: Initial production-quality foundation using:
 from __future__ import annotations
 
 import asyncio
+import json
+import time
+import uuid
+from collections import deque
 from typing import Any
 
 from livekit import rtc
@@ -42,6 +46,7 @@ from app.routing import (
     TwoBotOrchestrator,
     connect_secondary_participant,
     disconnect_secondary_participant,
+    resolve_language_mode,
 )
 from app.tts import create_tts
 
@@ -70,17 +75,32 @@ __all__ = [
 def create_stt(settings: Settings) -> stt.STT:
     """Create the Speech-To-Text component using Groq Whisper.
 
-    Isolated configuration to allow switching models or language strategy
-    in later checkpoints without modifying the core agent flow.
+    Checkpoint 6.5: Multilingual by default. If groq_stt_language is unset, empty,
+    or 'auto', automatic language detection is enabled so English, Hindi, and Hinglish
+    are recognized accurately without forcing a single language.
     """
+    lang = (settings.groq_stt_language or "").strip()
+    if lang.lower() in ("", "auto", "multilingual", "none"):
+        logger.info(
+            "Initializing Groq STT with automatic multilingual detection (model: %s)",
+            settings.groq_stt_model,
+        )
+        return groq.STT(
+            model=settings.groq_stt_model,
+            language="",
+            detect_language=True,
+            api_key=settings.groq_api_key,
+        )
+
     logger.info(
-        "Initializing Groq STT (model: %s, language: %s)",
+        "Initializing Groq STT with specific target language '%s' (model: %s)",
+        lang,
         settings.groq_stt_model,
-        settings.groq_stt_language,
     )
     return groq.STT(
         model=settings.groq_stt_model,
-        language=settings.groq_stt_language,
+        language=lang,
+        detect_language=False,
         api_key=settings.groq_api_key,
     )
 
@@ -194,6 +214,7 @@ async def entrypoint(ctx: JobContext) -> None:
             sathi_input_opts = room_io.RoomInputOptions(
                 audio_enabled=False,
                 text_enabled=False,
+                close_on_disconnect=False,
             )
             await session_sathi.start(
                 agent=sathi_agent,
@@ -228,10 +249,13 @@ async def entrypoint(ctx: JobContext) -> None:
     )
 
     # 8. Initialize primary AgentSession for AI Dost
+    # Checkpoint 6.5: Snappy conversational endpointing (0.35s) + preemptive generation
     session_dost = AgentSession(
         stt=stt_provider,
         llm=llm_dost,
         tts=tts_dost,
+        min_endpointing_delay=0.35,
+        preemptive_generation=True,
     )
     orchestrator.set_primary_session(session_dost)
 
@@ -249,14 +273,18 @@ async def entrypoint(ctx: JobContext) -> None:
 
         @session_sathi.on("agent_state_changed")
         def _on_sathi_state_changed(ev: AgentStateChangedEvent) -> None:
+            # Only release lock on actual transition from speaking to idle/listening
             if (
-                ev.new_state in ("idle", "listening")
+                ev.old_state == "speaking"
+                and ev.new_state in ("idle", "listening")
                 and orchestrator.arbitrator.current_owner == "sathi"
             ):
-                logger.info("Sathi speech concluded; releasing arbitration lock")
+                logger.info(
+                    "Sathi speech playback concluded; releasing arbitration lock"
+                )
                 orchestrator.arbitrator.release("sathi")
 
-    # Wire user speaking listener to interrupt Sathi immediately on barge-in
+    # Wire user speaking listener to interrupt Sathi on genuine barge-in
     @session_dost.on("user_state_changed")
     def _on_user_state_changed(ev: UserStateChangedEvent) -> None:
         if (
@@ -264,12 +292,72 @@ async def entrypoint(ctx: JobContext) -> None:
             and session_sathi is not None
             and orchestrator.arbitrator.current_owner == "sathi"
         ):
-            logger.info("User speaking while Sathi is active; interrupting Sathi")
+            # Guard against immediate acoustic echo or trailing user breath during warmup
+            time_since_sathi_start = time.monotonic() - getattr(
+                orchestrator, "sathi_turn_started_at", 0.0
+            )
+            if time_since_sathi_start < 1.5:
+                logger.debug(
+                    "Ignoring potential echo or transition barge-in during Sathi warmup (%.2fs < 1.5s)",
+                    time_since_sathi_start,
+                )
+                return
+
+            logger.info(
+                "Genuine user speech detected while Sathi is active; interrupting Sathi"
+            )
             try:
                 session_sathi.interrupt()
             except (RuntimeError, TimeoutError, asyncio.CancelledError) as e:
                 logger.debug("Sathi interrupt error: %s", e)
             orchestrator.arbitrator.release("sathi")
+
+    async def _broadcast_turn(
+        room: rtc.Room | None,
+        turn_id: str,
+        speaker_id: str,
+        speaker_name: str,
+        speaker_type: str,
+        text: str,
+        input_type: str,
+        timestamp: float | None = None,
+    ) -> None:
+        """Broadcast a conversation turn via data channel to all room participants."""
+        if not room:
+            return
+        try:
+            is_conn = getattr(room, "isconnected", None)
+            if callable(is_conn) and not is_conn():
+                return
+            local_p = getattr(room, "local_participant", None)
+            if not local_p or not hasattr(local_p, "publish_data"):
+                return
+            payload = json.dumps(
+                {
+                    "type": "conversation_turn",
+                    "id": turn_id,
+                    "speaker_id": speaker_id,
+                    "speaker_name": speaker_name,
+                    "speaker_type": speaker_type,
+                    "text": text,
+                    "input_type": input_type,
+                    "timestamp": int((timestamp or time.time()) * 1000),
+                }
+            )
+            await local_p.publish_data(
+                payload.encode("utf-8"),
+                reliable=True,
+                topic="lk.chat",
+            )
+        except (
+            RuntimeError,
+            TimeoutError,
+            ValueError,
+            KeyError,
+            OSError,
+            asyncio.CancelledError,
+        ) as e:
+            logger.debug("Turn broadcast skipped or failed: %s", e)
 
     # Record bot turns in shared ConversationMemory on generation completion
     @session_dost.on("conversation_item_added")
@@ -286,6 +374,17 @@ async def entrypoint(ctx: JobContext) -> None:
                         bot_name="AI Dost",
                         text=text,
                         input_type="voice",
+                    )
+                    asyncio.create_task(
+                        _broadcast_turn(
+                            ctx.room,
+                            turn_id=f"bot_{uuid.uuid4().hex[:6]}",
+                            speaker_id="ai-dost",
+                            speaker_name="AI Dost",
+                            speaker_type="ai-dost",
+                            text=text,
+                            input_type="voice",
+                        )
                     )
         except (RuntimeError, ValueError, KeyError) as e:
             logger.warning("Error storing AI Dost turn in memory: %s", e)
@@ -307,6 +406,17 @@ async def entrypoint(ctx: JobContext) -> None:
                             bot_name="AI Sathi",
                             text=text,
                             input_type="voice",
+                        )
+                        asyncio.create_task(
+                            _broadcast_turn(
+                                ctx.room,
+                                turn_id=f"bot_{uuid.uuid4().hex[:6]}",
+                                speaker_id="ai-sathi",
+                                speaker_name="AI Sathi",
+                                speaker_type="ai-sathi",
+                                text=text,
+                                input_type="voice",
+                            )
                         )
             except (RuntimeError, ValueError, KeyError) as e:
                 logger.warning("Error storing AI Sathi turn in memory: %s", e)
@@ -338,6 +448,12 @@ async def entrypoint(ctx: JobContext) -> None:
                         active_human.identity,
                     )
                     session_dost.room_io.set_participant(active_human.identity)
+                    if (
+                        session_sathi is not None
+                        and hasattr(session_sathi, "room_io")
+                        and session_sathi.room_io is not None
+                    ):
+                        session_sathi.room_io.set_participant(active_human.identity)
         except (RuntimeError, AttributeError, ValueError) as e:
             logger.warning("Error switching active speaker: %s", e)
 
@@ -358,6 +474,41 @@ async def entrypoint(ctx: JobContext) -> None:
                     p.identity,
                 )
                 session_dost.room_io.set_participant(p.identity)
+                if (
+                    session_sathi is not None
+                    and hasattr(session_sathi, "room_io")
+                    and session_sathi.room_io is not None
+                ):
+                    session_sathi.room_io.set_participant(p.identity)
+
+            # Send recent conversation history to newly joined human participant
+            if (
+                p.identity not in ("ai-dost", "ai-sathi")
+                and ctx.room
+                and ctx.room.local_participant
+                and memory.get_turns()
+            ):
+                turns_data = [
+                    {
+                        "id": t.turn_id,
+                        "speaker_id": t.speaker_id,
+                        "speaker_name": t.speaker_name,
+                        "speaker_type": t.speaker_type,
+                        "text": t.text,
+                        "input_type": t.input_type,
+                        "timestamp": int(t.timestamp.timestamp() * 1000),
+                    }
+                    for t in memory.get_turns()
+                ]
+                resp = json.dumps({"type": "conversation_history", "turns": turns_data})
+                asyncio.create_task(
+                    ctx.room.local_participant.publish_data(
+                        resp.encode("utf-8"),
+                        reliable=True,
+                        destination_identities=[p.identity],
+                        topic="lk.chat",
+                    )
+                )
         except (RuntimeError, AttributeError, ValueError) as e:
             logger.debug("Participant connect handler error: %s", e)
 
@@ -377,25 +528,45 @@ async def entrypoint(ctx: JobContext) -> None:
                     ]
                     if remotes:
                         session_dost.room_io.set_participant(remotes[0].identity)
+                        if (
+                            session_sathi is not None
+                            and hasattr(session_sathi, "room_io")
+                            and session_sathi.room_io is not None
+                        ):
+                            session_sathi.room_io.set_participant(remotes[0].identity)
                     else:
                         session_dost.room_io.unset_participant()
+                        if (
+                            session_sathi is not None
+                            and hasattr(session_sathi, "room_io")
+                            and session_sathi.room_io is not None
+                        ):
+                            session_sathi.room_io.unset_participant()
         except (RuntimeError, AttributeError, ValueError) as e:
             logger.debug("Participant disconnect handler error: %s", e)
 
-    # Unified voice + text input handler
-    async def _on_text_input(sess: AgentSession, ev: TextInputEvent) -> None:
+    recent_text_turns: deque[tuple[str, str, float]] = deque(maxlen=20)
+
+    async def _handle_user_text_message(
+        raw_text: str,
+        speaker_id: str,
+        speaker_name: str,
+    ) -> None:
         try:
-            raw_text = (ev.text or "").strip()
+            raw_text = (raw_text or "").strip()
             if not raw_text:
                 return
 
-            participant = ev.participant
-            if participant is not None:
-                speaker_id = getattr(participant, "identity", None) or "human-text"
-                speaker_name = getattr(participant, "name", None) or speaker_id
-            else:
-                speaker_id = "human-text"
-                speaker_name = "User"
+            now = time.monotonic()
+            for prev_text, prev_id, prev_time in recent_text_turns:
+                if (
+                    prev_text == raw_text
+                    and prev_id == speaker_id
+                    and (now - prev_time) < 1.5
+                ):
+                    logger.debug("Deduplicated identical text turn from %s", speaker_id)
+                    return
+            recent_text_turns.append((raw_text, speaker_id, now))
 
             decision = orchestrator.router.route(raw_text)
             logger.info(
@@ -406,6 +577,7 @@ async def entrypoint(ctx: JobContext) -> None:
                 decision.target,
             )
 
+            turn_id = f"text_{uuid.uuid4().hex[:6]}"
             # Record human turn into unified shared memory
             memory.add_human_turn(
                 speaker_id=speaker_id,
@@ -415,16 +587,36 @@ async def entrypoint(ctx: JobContext) -> None:
                 target_bot=decision.target,
             )
 
-            # Build bounded context and persona instructions
+            # Broadcast the human turn to room participants
+            asyncio.create_task(
+                _broadcast_turn(
+                    ctx.room,
+                    turn_id=turn_id,
+                    speaker_id=speaker_id,
+                    speaker_name=speaker_name,
+                    speaker_type="human",
+                    text=decision.cleaned_text,
+                    input_type="text",
+                )
+            )
+
+            # Evaluate language policy for text input
+            lang_policy = resolve_language_mode(
+                raw_text, orchestrator.preferred_language
+            )
+            if lang_policy.new_persistent_preference is not None:
+                orchestrator.preferred_language = lang_policy.new_persistent_preference
+
+            # Build bounded context and persona instructions with language directive
             context_str = memory.format_context_for_llm(exclude_last=True)
             instructions = orchestrator.build_instructions_with_context(
-                decision.target, context_str
+                decision.target, context_str, lang_policy.system_directive
             )
 
             # Claim user turn programmatic scope
-            async with sess._claim_user_turn():
+            async with session_dost._claim_user_turn():
                 try:
-                    await sess.interrupt()
+                    await session_dost.interrupt()
                 except (RuntimeError, TimeoutError, asyncio.CancelledError):
                     pass
                 if session_sathi is not None:
@@ -437,7 +629,7 @@ async def entrypoint(ctx: JobContext) -> None:
                     acquired = await orchestrator.arbitrator.acquire("dost")
                     if acquired:
                         orchestrator.active_bot = "dost"
-                        sess.generate_reply(
+                        session_dost.generate_reply(
                             user_input=decision.cleaned_text,
                             instructions=instructions,
                         )
@@ -445,12 +637,16 @@ async def entrypoint(ctx: JobContext) -> None:
                     acquired = await orchestrator.arbitrator.acquire("sathi")
                     if acquired:
                         orchestrator.active_bot = "sathi"
+                        orchestrator.sathi_turn_started_at = time.monotonic()
                         handle = session_sathi.generate_reply(
                             user_input=decision.cleaned_text,
                             instructions=instructions,
                         )
 
-                        def _on_sathi_text_done(_: Any) -> None:
+                        def _on_sathi_text_done(sh: Any) -> None:
+                            err = sh.exception() if hasattr(sh, "exception") else None
+                            if err:
+                                logger.error("AI Sathi text response failed: %s", err)
                             orchestrator.arbitrator.release("sathi")
 
                         handle.add_done_callback(_on_sathi_text_done)
@@ -463,6 +659,79 @@ async def entrypoint(ctx: JobContext) -> None:
             asyncio.CancelledError,
         ) as e:
             logger.warning("Error processing text input turn: %s", e)
+
+    async def _on_text_input(sess: AgentSession, ev: TextInputEvent) -> None:
+        participant = ev.participant
+        if participant is not None:
+            s_id = getattr(participant, "identity", None) or "human-text"
+            s_name = getattr(participant, "name", None) or s_id
+        else:
+            s_id = "human-text"
+            s_name = "User"
+        await _handle_user_text_message(ev.text, s_id, s_name)
+
+    @ctx.room.on("data_received")
+    def _on_room_data_received(dp: rtc.DataPacket) -> None:
+        try:
+            if not dp.data:
+                return
+            raw_str = dp.data.decode("utf-8")
+            try:
+                parsed = json.loads(raw_str)
+            except json.JSONDecodeError:
+                parsed = {"text": raw_str}
+
+            msg_type = parsed.get("type", "chat_message")
+            if msg_type == "request_history":
+                p = dp.participant
+                if p and ctx.room and ctx.room.local_participant:
+                    turns_data = [
+                        {
+                            "id": t.turn_id,
+                            "speaker_id": t.speaker_id,
+                            "speaker_name": t.speaker_name,
+                            "speaker_type": t.speaker_type,
+                            "text": t.text,
+                            "input_type": t.input_type,
+                            "timestamp": int(t.timestamp.timestamp() * 1000),
+                        }
+                        for t in memory.get_turns()
+                    ]
+                    resp = json.dumps(
+                        {"type": "conversation_history", "turns": turns_data}
+                    )
+                    asyncio.create_task(
+                        ctx.room.local_participant.publish_data(
+                            resp.encode("utf-8"),
+                            reliable=True,
+                            destination_identities=[p.identity],
+                            topic="lk.chat",
+                        )
+                    )
+                return
+
+            text = (parsed.get("text") or parsed.get("message") or "").strip()
+            if not text:
+                return
+
+            p = dp.participant
+            if p is not None:
+                s_id = getattr(p, "identity", None) or "human-text"
+                s_name = getattr(p, "name", None) or s_id
+            else:
+                s_id = parsed.get("speaker_id") or "human-text"
+                s_name = parsed.get("speaker_name") or "User"
+
+            asyncio.create_task(_handle_user_text_message(text, s_id, s_name))
+        except (
+            RuntimeError,
+            TimeoutError,
+            ValueError,
+            KeyError,
+            OSError,
+            asyncio.CancelledError,
+        ) as e:
+            logger.debug("Error handling room data packet: %s", e)
 
     # 9. session_dost.start(): Attach orchestrator with text + audio input options
     dost_input_opts = room_io.RoomInputOptions(

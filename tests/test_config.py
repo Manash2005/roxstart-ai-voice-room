@@ -10,7 +10,7 @@ from app.config import ConfigurationError, Settings, get_settings
 
 def test_missing_environment_variables_raises_clear_error():
     """Verify that missing required environment variables produce a clear, informative error."""
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {}, clear=True), patch("app.config.load_dotenv"):
         with pytest.raises(ConfigurationError) as exc_info:
             Settings.load()
 
@@ -44,13 +44,17 @@ def test_valid_settings_loading_with_defaults():
         assert settings.openrouter_base_url == "https://openrouter.ai/api/v1"
         assert settings.groq_api_key == "gsk_test123"
         assert settings.groq_stt_model == "whisper-large-v3-turbo"
-        assert settings.groq_stt_language == "hi"
+        assert settings.groq_stt_language == ""
         assert settings.tts_model == "hi_IN-rohan-medium"
         assert settings.tts_sample_rate == 22050
         assert settings.tts_device == "cpu"
         assert settings.tts_auto_download is True
         assert settings.log_level == "INFO"
         assert settings.active_persona == "dost"
+        assert settings.frontend_origin == "http://localhost:5173"
+        assert settings.api_host == "0.0.0.0"
+        assert settings.api_port == 8080
+        assert settings.allowed_origins == ["http://localhost:5173"]
 
 
 def test_settings_custom_overrides():
@@ -71,6 +75,9 @@ def test_settings_custom_overrides():
         "TTS_AUTO_DOWNLOAD": "false",
         "LOG_LEVEL": "DEBUG",
         "ACTIVE_PERSONA": "sathi",
+        "FRONTEND_ORIGIN": "https://app.roxstar.ai, http://localhost:3000",
+        "API_HOST": "127.0.0.1",
+        "API_PORT": "9000",
     }
     with patch.dict(os.environ, env, clear=True):
         settings = Settings.load()
@@ -84,6 +91,15 @@ def test_settings_custom_overrides():
         assert settings.tts_auto_download is False
         assert settings.log_level == "DEBUG"
         assert settings.active_persona == "sathi"
+        assert (
+            settings.frontend_origin == "https://app.roxstar.ai, http://localhost:3000"
+        )
+        assert settings.api_host == "127.0.0.1"
+        assert settings.api_port == 9000
+        assert settings.allowed_origins == [
+            "https://app.roxstar.ai",
+            "http://localhost:3000",
+        ]
 
 
 def test_invalid_active_persona_raises_configuration_error():

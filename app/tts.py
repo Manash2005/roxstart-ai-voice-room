@@ -98,7 +98,12 @@ class _PiperChunkedStream(tts.ChunkedStream):
         self._piper_tts = tts_instance
 
     async def _run(self, output_emitter: AudioEmitter) -> None:
-        """Synthesize text in a background thread and push PCM audio to LiveKit."""
+        """Synthesize text in a background thread and push PCM audio to LiveKit.
+
+        Checkpoint 6.5 optimization: Streams sentence chunks to output_emitter
+        as soon as each sentence finishes synthesis, rather than waiting for the entire
+        paragraph to complete. This dramatically reduces first-audio playback latency.
+        """
         # Always initialize LiveKit AudioEmitter first so it is marked started
         req_id = f"piper_{uuid.uuid4().hex[:8]}"
         output_emitter.initialize(
@@ -113,17 +118,48 @@ class _PiperChunkedStream(tts.ChunkedStream):
             output_emitter.flush()
             return
 
-        try:
-            # Run CPU-bound ONNX inference in worker thread pool
-            pcm_bytes = await asyncio.to_thread(
-                self._piper_tts.synthesize_raw_pcm, text
-            )
+        loop = asyncio.get_running_loop()
+        chunk_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        worker_error: list[Exception] = []
 
-            if pcm_bytes:
-                output_emitter.push(pcm_bytes)
+        def _synthesize_worker() -> None:
+            try:
+                voice = self._piper_tts._get_or_load_voice()
+                if hasattr(voice, "synthesize"):
+                    for chunk in voice.synthesize(text):
+                        raw = getattr(chunk, "audio_int16_bytes", b"")
+                        if raw:
+                            loop.call_soon_threadsafe(chunk_queue.put_nowait, raw)
+                else:
+                    raw = self._piper_tts.synthesize_raw_pcm(text)
+                    if raw:
+                        loop.call_soon_threadsafe(chunk_queue.put_nowait, raw)
+            except (RuntimeError, ValueError, OSError, AttributeError) as exc:
+                logger.error("Error in Piper TTS synthesis worker: %s", exc)
+                worker_error.append(exc)
+            finally:
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, None)
+
+        worker_task = asyncio.create_task(asyncio.to_thread(_synthesize_worker))
+        has_audio = False
+
+        try:
+            while True:
+                chunk = await chunk_queue.get()
+                if chunk is None:
+                    break
+                output_emitter.push(chunk)
+                has_audio = True
+
+            await worker_task
+            if worker_error:
+                raise worker_error[0]
+
+            if has_audio:
                 output_emitter.flush()
             else:
                 logger.warning("Piper TTS produced empty audio for text: '%s'", text)
+                output_emitter.flush()
         except Exception as e:
             logger.error("Error synthesizing speech with Piper TTS: %s", e)
             raise

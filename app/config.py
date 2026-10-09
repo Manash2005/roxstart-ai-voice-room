@@ -26,7 +26,7 @@ class Settings:
         openrouter_base_url: OpenRouter API base URL.
         groq_api_key: Groq Cloud API key for Whisper STT.
         groq_stt_model: Groq Whisper model name (default: 'whisper-large-v3-turbo').
-        groq_stt_language: Initial STT language target (default: 'hi' for Hindi/Hinglish).
+        groq_stt_language: Initial STT language target (default: '' for automatic multilingual recognition).
         log_level: Logging severity level (default: 'INFO').
         active_persona: Active persona to instantiate ('dost' or 'sathi', default: 'dost').
     """
@@ -44,7 +44,7 @@ class Settings:
     # Groq STT configuration
     groq_api_key: str = ""
     groq_stt_model: str = "whisper-large-v3-turbo"
-    groq_stt_language: str = "hi"
+    groq_stt_language: str = ""
 
     # Local TTS configuration (Piper Hindi)
     tts_model: str = "hi_IN-rohan-medium"
@@ -57,6 +57,20 @@ class Settings:
     # Application settings
     log_level: str = "INFO"
     active_persona: str = "dost"
+
+    # API & CORS configuration
+    frontend_origin: str = "http://localhost:5173"
+    api_host: str = "0.0.0.0"
+    api_port: int = 8080
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Return the parsed list of allowed frontend origins for CORS."""
+        return [
+            origin.strip()
+            for origin in self.frontend_origin.split(",")
+            if origin.strip()
+        ]
 
     @classmethod
     def load(cls, env_path: Path | str | None = None) -> Settings:
@@ -71,10 +85,12 @@ class Settings:
         Raises:
             ConfigurationError: If any required environment variables are unset.
         """
-        # Load environment variables from .env file if present
+        # Load environment variables from .env / .env.local file if present
         if env_path:
             load_dotenv(dotenv_path=env_path, override=False)
         else:
+            if Path(".env.local").exists():
+                load_dotenv(dotenv_path=".env.local", override=False)
             load_dotenv(override=False)
 
         missing_vars: list[str] = []
@@ -123,7 +139,7 @@ class Settings:
             os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo").strip()
             or "whisper-large-v3-turbo"
         )
-        groq_stt_language = os.getenv("GROQ_STT_LANGUAGE", "hi").strip() or "hi"
+        groq_stt_language = os.getenv("GROQ_STT_LANGUAGE", "").strip()
 
         # Local TTS parameters (Piper Hindi/Hinglish)
         tts_model = (
@@ -151,6 +167,17 @@ class Settings:
                 "Must be either 'dost' or 'sathi'."
             )
 
+        frontend_origin = (
+            os.getenv("FRONTEND_ORIGIN", "http://localhost:5173").strip()
+            or "http://localhost:5173"
+        )
+        api_host = os.getenv("API_HOST", "0.0.0.0").strip() or "0.0.0.0"
+        api_port_str = os.getenv("API_PORT", "8080").strip()
+        try:
+            api_port = int(api_port_str)
+        except ValueError:
+            api_port = 8080
+
         return cls(
             livekit_url=livekit_url,
             livekit_api_key=livekit_api_key,
@@ -169,6 +196,9 @@ class Settings:
             tts_auto_download=tts_auto_download,
             log_level=log_level,
             active_persona=active_persona,
+            frontend_origin=frontend_origin,
+            api_host=api_host,
+            api_port=api_port,
         )
 
 
