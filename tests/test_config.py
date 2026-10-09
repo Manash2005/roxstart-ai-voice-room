@@ -102,6 +102,21 @@ def test_settings_custom_overrides():
         ]
 
 
+def test_render_port_environment_variable():
+    """Verify that cloud provider PORT env variable is respected for Render/Heroku deployments."""
+    env = {
+        "LIVEKIT_URL": "wss://test.livekit.cloud",
+        "LIVEKIT_API_KEY": "key",
+        "LIVEKIT_API_SECRET": "secret",
+        "OPENROUTER_API_KEY": "sk-test",
+        "GROQ_API_KEY": "groq-key",
+        "PORT": "10000",
+    }
+    with patch.dict(os.environ, env, clear=True):
+        settings = Settings.load()
+        assert settings.api_port == 10000
+
+
 def test_invalid_active_persona_raises_configuration_error():
     """Verify that an unsupported ACTIVE_PERSONA value raises ConfigurationError."""
     env = {

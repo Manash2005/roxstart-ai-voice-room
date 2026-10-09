@@ -172,7 +172,9 @@ class Settings:
             or "http://localhost:5173"
         )
         api_host = os.getenv("API_HOST", "0.0.0.0").strip() or "0.0.0.0"
-        api_port_str = os.getenv("API_PORT", "8080").strip()
+        api_port_str = (
+            os.getenv("PORT", "").strip() or os.getenv("API_PORT", "8080").strip()
+        )
         try:
             api_port = int(api_port_str)
         except ValueError:
