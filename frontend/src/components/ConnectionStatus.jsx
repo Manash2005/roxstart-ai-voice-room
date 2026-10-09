@@ -4,6 +4,11 @@ import { Wifi, WifiOff, AlertCircle, RefreshCw } from 'lucide-react';
 /**
  * Visual badge indicating current WebRTC room connection state.
  *
+ * Designed with minimalist frosted glass and semantic color cues:
+ * - Connected: #4F7D32 (Forest Green)
+ * - Connecting / Reconnecting: #F5B52E & #FFD16A (Amber & Cream)
+ * - Error: #D9361E (Crimson Rust)
+ *
  * @param {Object} props
  * @param {'connecting'|'connected'|'reconnecting'|'disconnected'|'error'} props.state
  * @param {string} [props.error]
@@ -13,34 +18,34 @@ export default function ConnectionStatus({ state, error }) {
     connected: {
       label: 'Connected',
       icon: Wifi,
-      bg: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
-      dot: 'bg-emerald-400 animate-pulse',
+      bg: 'bg-[#4F7D32]/15 border-[#4F7D32]/40 text-[#a3d98b]',
+      dot: 'bg-[#4F7D32] animate-pulse',
     },
     connecting: {
       label: 'Connecting...',
       icon: RefreshCw,
-      bg: 'bg-purple-500/15 border-purple-500/40 text-purple-300',
-      dot: 'bg-purple-400 animate-ping',
+      bg: 'bg-[#F5B52E]/15 border-[#F5B52E]/40 text-[#FFD16A]',
+      dot: 'bg-[#FFD16A] animate-ping',
       spin: true,
     },
     reconnecting: {
       label: 'Reconnecting...',
       icon: RefreshCw,
-      bg: 'bg-amber-500/15 border-amber-500/40 text-amber-300',
-      dot: 'bg-amber-400 animate-ping',
+      bg: 'bg-[#F5B52E]/20 border-[#F5B52E]/50 text-[#FFD16A]',
+      dot: 'bg-[#F5B52E] animate-ping',
       spin: true,
     },
     error: {
       label: error || 'Connection Error',
       icon: AlertCircle,
-      bg: 'bg-rose-500/15 border-rose-500/40 text-rose-300',
-      dot: 'bg-rose-400',
+      bg: 'bg-[#D9361E]/15 border-[#D9361E]/40 text-[#ff8e7d]',
+      dot: 'bg-[#D9361E]',
     },
     disconnected: {
       label: 'Disconnected',
       icon: WifiOff,
-      bg: 'bg-slate-700/30 border-slate-700 text-slate-400',
-      dot: 'bg-slate-500',
+      bg: 'bg-white/[0.04] border-white/10 text-stone-400',
+      dot: 'bg-stone-500',
     },
   };
 

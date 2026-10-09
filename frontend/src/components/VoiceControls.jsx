@@ -5,6 +5,12 @@ import { useLocalParticipant } from '@livekit/components-react';
 /**
  * Bottom control bar providing microphone mute/unmute, chat toggle, and room disconnect buttons.
  *
+ * Implemented with minimalist executive styling, frosted glassmorphism,
+ * and high-contrast ergonomic controls:
+ * - Active / Muted mic: #4F7D32 vs #D9361E
+ * - Chat toggle: #FFD16A & #4F7D32
+ * - Leave room: #D9361E
+ *
  * @param {Object} props
  * @param {Function} props.onLeave - Callback triggered when user clicks Leave Room
  * @param {Function} [props.onToggleChat] - Callback to toggle chat panel visibility
@@ -35,14 +41,14 @@ export default function VoiceControls({ onLeave, onToggleChat, isChatOpen = fals
     <div className="flex flex-col items-center gap-3">
       {/* Device error banner if permission denied */}
       {deviceError && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs shadow-lg animate-fade-in">
-          <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#D9361E]/15 border border-[#D9361E]/40 text-[#ffb0a3] text-xs shadow-lg animate-fade-in">
+          <AlertTriangle className="w-4 h-4 text-[#D9361E] shrink-0" />
           <span>{deviceError}</span>
         </div>
       )}
 
       {/* Main bottom floating controls */}
-      <div className="flex items-center gap-3 sm:gap-4 px-5 sm:px-6 py-3 rounded-2xl bg-glass border border-slate-800/80 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center gap-3 sm:gap-4 px-5 sm:px-6 py-3 rounded-2xl bg-glass border border-white/[0.08] shadow-2xl backdrop-blur-2xl">
         {/* Mic Toggle Button */}
         <button
           onClick={toggleMicrophone}
@@ -50,13 +56,13 @@ export default function VoiceControls({ onLeave, onToggleChat, isChatOpen = fals
           aria-label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
           className={`flex items-center gap-2.5 px-4 sm:px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 shadow-md cursor-pointer ${
             isMicrophoneEnabled
-              ? 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-100 border border-slate-700/60'
-              : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/30'
+              ? 'bg-white/[0.06] hover:bg-white/[0.12] text-stone-100 border border-white/10'
+              : 'bg-[#D9361E] hover:bg-[#bd2a13] text-white shadow-[#D9361E]/30'
           }`}
         >
           {isMicrophoneEnabled ? (
             <>
-              <Mic className="w-4 h-4 text-emerald-400" />
+              <Mic className="w-4 h-4 text-[#a3d98b]" />
               <span>Mute</span>
             </>
           ) : (
@@ -75,11 +81,11 @@ export default function VoiceControls({ onLeave, onToggleChat, isChatOpen = fals
             aria-label={isChatOpen ? 'Hide text chat' : 'Open text chat'}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 border shadow-md cursor-pointer ${
               isChatOpen
-                ? 'bg-purple-600/30 text-purple-300 border-purple-500/50 shadow-purple-600/20'
-                : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border-slate-700/60'
+                ? 'bg-[#4F7D32]/25 text-[#FFD16A] border-[#4F7D32]/50 shadow-[#4F7D32]/20'
+                : 'bg-white/[0.06] hover:bg-white/[0.12] text-stone-300 border-white/10'
             }`}
           >
-            <MessageSquare className="w-4 h-4 text-purple-400" />
+            <MessageSquare className="w-4 h-4 text-[#FFD16A]" />
             <span className="hidden sm:inline">Chat</span>
           </button>
         )}
@@ -89,7 +95,7 @@ export default function VoiceControls({ onLeave, onToggleChat, isChatOpen = fals
           onClick={onLeave}
           type="button"
           aria-label="Leave voice room"
-          className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-medium text-sm bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 hover:border-rose-600 transition-all duration-200 shadow-md cursor-pointer"
+          className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl font-medium text-sm bg-[#D9361E]/15 hover:bg-[#D9361E] text-[#ff8e7d] hover:text-white border border-[#D9361E]/30 hover:border-[#D9361E] transition-all duration-200 shadow-md cursor-pointer"
         >
           <PhoneOff className="w-4 h-4" />
           <span>Leave</span>

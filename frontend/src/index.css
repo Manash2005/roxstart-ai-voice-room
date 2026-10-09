@@ -1,69 +1,96 @@
 @import "tailwindcss";
 
+:root {
+  --color-forest: #4F7D32;
+  --color-cream: #FFD16A;
+  --color-gold: #F5B52E;
+  --color-crimson: #D9361E;
+}
+
 @layer base {
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: #030712;
-    color: #f8fafc;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #090d09;
+    color: #f5f5f4;
     min-height: 100vh;
     overflow-x: hidden;
   }
 
   h1, h2, h3, h4, .font-display {
-    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Outfit', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
-/* Ambient glow background */
+/* Subtle, sophisticated ambient lighting with deep forest green and warm amber hints */
 .bg-ambient-radial {
-  background: radial-gradient(circle at 50% 0%, rgba(126, 34, 206, 0.18) 0%, rgba(30, 58, 138, 0.12) 40%, rgba(3, 7, 18, 0) 70%);
+  background: 
+    radial-gradient(circle at 50% -10%, rgba(79, 125, 50, 0.16) 0%, rgba(245, 181, 46, 0.05) 32%, rgba(9, 13, 9, 0) 65%),
+    radial-gradient(circle at 10% 90%, rgba(79, 125, 50, 0.08) 0%, rgba(9, 13, 9, 0) 50%),
+    #090d09;
 }
 
+/* Refined frosted glassmorphism - executive & minimal */
 .bg-glass {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(51, 65, 85, 0.45);
+  background: rgba(14, 20, 14, 0.68);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 .bg-glass-card {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.5);
+  background: rgba(18, 26, 18, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Audio wave animations for speaking state */
 @keyframes wave-bar {
-  0%, 100% { height: 6px; }
-  50% { height: 24px; }
+  0%, 100% { height: 5px; opacity: 0.6; }
+  50% { height: 22px; opacity: 1; }
 }
 
 .animate-wave-1 {
-  animation: wave-bar 0.9s ease-in-out infinite;
+  animation: wave-bar 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 .animate-wave-2 {
-  animation: wave-bar 0.9s ease-in-out infinite 0.2s;
+  animation: wave-bar 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.2s;
 }
 .animate-wave-3 {
-  animation: wave-bar 0.9s ease-in-out infinite 0.4s;
+  animation: wave-bar 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.4s;
 }
 .animate-wave-4 {
-  animation: wave-bar 0.9s ease-in-out infinite 0.15s;
+  animation: wave-bar 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite 0.15s;
 }
 
-/* Custom scrollbar */
+/* Subtle micro-glow for buttons and highlights */
+.glow-forest {
+  box-shadow: 0 0 24px -4px rgba(79, 125, 50, 0.35);
+}
+
+.glow-gold {
+  box-shadow: 0 0 24px -4px rgba(245, 181, 46, 0.35);
+}
+
+.glow-crimson {
+  box-shadow: 0 0 24px -4px rgba(217, 54, 30, 0.35);
+}
+
+/* Bespoke minimalist scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #030712;
+  background: #090d09;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(79, 125, 50, 0.3);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(79, 125, 50, 0.5);
 }

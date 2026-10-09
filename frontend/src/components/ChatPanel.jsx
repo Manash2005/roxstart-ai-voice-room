@@ -20,6 +20,11 @@ import { useRoomChat } from '../hooks/useRoomChat';
  * Real-time Text Chat & Unified Conversation Transcript Panel.
  *
  * Displays both voice-transcribed turns and typed chat messages chronologically.
+ * Features executive frosted glass styling and the bespoke 4-color palette:
+ * - #4F7D32 (Forest Green)
+ * - #FFD16A (Soft Cream)
+ * - #F5B52E (Warm Amber Gold)
+ * - #D9361E (Crimson Danger)
  *
  * @param {Object} props
  * @param {Function} [props.onClose] - Optional callback to close or dock the panel
@@ -88,20 +93,20 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
 
   return (
     <div
-      className="flex flex-col h-full bg-slate-950/95 border border-slate-800/90 rounded-3xl shadow-2xl overflow-hidden backdrop-blur-2xl"
+      className="flex flex-col h-full bg-[#0c130c]/90 border border-white/[0.08] rounded-3xl shadow-2xl overflow-hidden backdrop-blur-2xl"
       data-testid="chat-panel"
     >
       {/* Top Chat Header */}
-      <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/60">
+      <div className="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#121c12]/70">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+          <div className="w-8 h-8 rounded-xl bg-[#4F7D32]/25 border border-[#4F7D32]/40 flex items-center justify-center text-[#FFD16A]">
             <MessageSquare className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-100 font-display">
+            <h2 className="text-sm font-bold text-stone-100 font-display">
               Room Conversation
             </h2>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-stone-400">
               Voice Transcripts &amp; Text Chat
             </span>
           </div>
@@ -111,7 +116,7 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
           <button
             onClick={onClose}
             aria-label="Close Chat Panel"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/80 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-white/[0.08] transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -120,8 +125,8 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
 
       {/* Reconnecting banner if WebRTC connection is temporarily disrupted */}
       {isReconnecting && (
-        <div className="px-4 py-2 bg-amber-950/70 border-b border-amber-500/40 text-amber-200 text-xs flex items-center gap-2">
-          <WifiOff className="w-3.5 h-3.5 animate-pulse text-amber-400 shrink-0" />
+        <div className="px-4 py-2 bg-[#F5B52E]/15 border-b border-[#F5B52E]/35 text-[#FFD16A] text-xs flex items-center gap-2">
+          <WifiOff className="w-3.5 h-3.5 animate-pulse text-[#F5B52E] shrink-0" />
           <span>Reconnecting to room... messages will sync automatically.</span>
         </div>
       )}
@@ -134,12 +139,12 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
         data-testid="chat-messages-container"
       >
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-            <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-slate-400">
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-stone-500">
+            <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-3 text-stone-400">
               <MessageSquare className="w-6 h-6" />
             </div>
-            <p className="text-sm font-medium text-slate-300">No messages yet</p>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs">
+            <p className="text-sm font-medium text-stone-300">No messages yet</p>
+            <p className="text-xs text-stone-500 mt-1 max-w-xs leading-relaxed">
               Speak into your microphone or type a question below in Hindi, Hinglish, or English.
             </p>
           </div>
@@ -158,29 +163,29 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
             // Speaker badge styling
             let badgeStyle = {
               label: msg.speakerName || 'Participant',
-              color: 'text-blue-400',
-              bg: 'bg-blue-500/10 border-blue-500/30',
+              color: 'text-stone-300',
+              bg: 'bg-white/[0.06] border-white/10',
               icon: User,
               bubbleBg: isLocal
-                ? 'bg-purple-600/20 border-purple-500/40 text-slate-100'
-                : 'bg-slate-900/90 border-slate-800 text-slate-200',
+                ? 'bg-[#4F7D32]/25 border-[#4F7D32]/45 text-stone-100'
+                : 'bg-[#141d14]/80 border-white/[0.08] text-stone-200',
             };
 
             if (isDost) {
               badgeStyle = {
                 label: 'AI Dost',
-                color: 'text-purple-300',
-                bg: 'bg-purple-500/15 border-purple-500/40',
+                color: 'text-[#FFD16A]',
+                bg: 'bg-[#F5B52E]/15 border-[#F5B52E]/35',
                 icon: Bot,
-                bubbleBg: 'bg-purple-950/40 border-purple-900/50 text-slate-100',
+                bubbleBg: 'bg-[#1c180e]/80 border-[#F5B52E]/30 text-stone-100',
               };
             } else if (isSathi) {
               badgeStyle = {
                 label: 'AI Sathi',
-                color: 'text-teal-300',
-                bg: 'bg-teal-500/15 border-teal-500/40',
+                color: 'text-[#a3d98b]',
+                bg: 'bg-[#4F7D32]/20 border-[#4F7D32]/40',
                 icon: Sparkles,
-                bubbleBg: 'bg-teal-950/40 border-teal-900/50 text-slate-100',
+                bubbleBg: 'bg-[#0f1a0f]/80 border-[#4F7D32]/40 text-stone-100',
               };
             }
 
@@ -193,7 +198,7 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
                 data-testid={`chat-message-${msg.id}`}
               >
                 {/* Meta header: Speaker Name, Modality Badge, Timestamp */}
-                <div className="flex items-center gap-2 mb-1 text-[11px] text-slate-400">
+                <div className="flex items-center gap-2 mb-1 text-[11px] text-stone-400">
                   <span
                     className={`inline-flex items-center gap-1 font-semibold ${badgeStyle.color}`}
                   >
@@ -203,17 +208,17 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
 
                   {/* Input modality indicator: Voice vs Text */}
                   <span
-                    className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] bg-slate-800/80 text-slate-400 border border-slate-700/60"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-white/[0.05] text-stone-400 border border-white/10"
                     title={msg.inputType === 'voice' ? 'Transcribed Voice Audio' : 'Typed Text Chat'}
                   >
                     {msg.inputType === 'voice' ? (
                       <>
-                        <Mic className="w-2.5 h-2.5 text-purple-400" />
+                        <Mic className="w-2.5 h-2.5 text-[#4F7D32]" />
                         <span>voice</span>
                       </>
                     ) : (
                       <>
-                        <MessageSquare className="w-2.5 h-2.5 text-blue-400" />
+                        <MessageSquare className="w-2.5 h-2.5 text-[#FFD16A]" />
                         <span>text</span>
                       </>
                     )}
@@ -231,26 +236,26 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
 
                 {/* Status indicator for local outgoing message */}
                 {isLocal && !isBot && (
-                  <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                  <div className="flex items-center gap-1 mt-1 text-[10px] text-stone-500">
                     {msg.status === 'sending' && (
-                      <span className="flex items-center gap-1 text-slate-400">
-                        <Clock className="w-3 h-3 animate-spin text-purple-400" />
+                      <span className="flex items-center gap-1 text-stone-400">
+                        <Clock className="w-3 h-3 animate-spin text-[#FFD16A]" />
                         <span>sending...</span>
                       </span>
                     )}
                     {msg.status === 'sent' && (
-                      <span className="flex items-center gap-0.5 text-emerald-400">
+                      <span className="flex items-center gap-0.5 text-[#4F7D32]">
                         <Check className="w-3 h-3" />
                         <span>sent</span>
                       </span>
                     )}
                     {msg.status === 'failed' && (
-                      <span className="flex items-center gap-1 text-rose-400">
-                        <AlertCircle className="w-3 h-3" />
+                      <span className="flex items-center gap-1 text-[#ff8e7d]">
+                        <AlertCircle className="w-3 h-3 text-[#D9361E]" />
                         <span>failed</span>
                         <button
                           onClick={() => retryMessage(msg.id)}
-                          className="ml-1 text-[11px] underline hover:text-rose-300 cursor-pointer flex items-center gap-0.5"
+                          className="ml-1 text-[11px] underline hover:text-white cursor-pointer flex items-center gap-0.5"
                         >
                           <RotateCw className="w-2.5 h-2.5" />
                           <span>Retry</span>
@@ -274,7 +279,7 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
               setUserScrolledUp(false);
               scrollToBottom(true);
             }}
-            className="px-3 py-1 rounded-full text-xs font-medium bg-slate-900/90 text-purple-300 border border-purple-500/40 shadow-lg hover:bg-purple-950 transition flex items-center gap-1 cursor-pointer"
+            className="px-3 py-1 rounded-full text-xs font-medium bg-[#121c12]/95 text-[#FFD16A] border border-[#FFD16A]/30 shadow-lg hover:bg-[#1a261a] transition flex items-center gap-1 cursor-pointer"
           >
             <ArrowDown className="w-3 h-3" />
             <span>Latest messages</span>
@@ -284,8 +289,8 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
 
       {/* Send Error Notice */}
       {sendError && (
-        <div className="px-4 py-1.5 bg-rose-950/60 border-t border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+        <div className="px-4 py-1.5 bg-[#D9361E]/15 border-t border-[#D9361E]/35 text-[#ffb0a3] text-xs flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5 text-[#D9361E] shrink-0" />
           <span className="truncate">{sendError}</span>
         </div>
       )}
@@ -293,7 +298,7 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
       {/* Bottom Message Input Bar */}
       <form
         onSubmit={handleSubmit}
-        className="p-3 border-t border-slate-800/80 bg-slate-900/80 flex items-center gap-2"
+        className="p-3 border-t border-white/[0.08] bg-[#121c12]/80 flex items-center gap-2"
       >
         <input
           type="text"
@@ -302,18 +307,18 @@ export default function ChatPanel({ onClose, localIdentity = '' }) {
           placeholder="Ask in Hindi, English, or Hinglish..."
           maxLength={1000}
           disabled={isSending}
-          className="flex-1 px-4 py-2.5 rounded-xl bg-slate-950/80 border border-slate-700/80 text-slate-100 placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+          className="flex-1 px-4 py-2.5 rounded-xl bg-[#090d09]/90 border border-white/10 text-stone-100 placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-[#4F7D32] focus:ring-1 focus:ring-[#4F7D32] transition"
         />
         <button
           type="submit"
           disabled={!inputText.trim() || isSending}
           aria-label="Send text message"
-          className="px-3.5 py-2.5 rounded-xl font-medium text-xs bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-md shadow-purple-600/30 transition flex items-center justify-center cursor-pointer"
+          className="px-3.5 py-2.5 rounded-xl font-medium text-xs bg-[#4F7D32] hover:bg-[#5a8c39] active:bg-[#436b2b] disabled:opacity-40 disabled:cursor-not-allowed text-[#FFD16A] border border-[#FFD16A]/20 shadow-md shadow-[#4F7D32]/25 transition flex items-center justify-center cursor-pointer"
         >
           {isSending ? (
-            <Clock className="w-4 h-4 animate-spin" />
+            <Clock className="w-4 h-4 animate-spin text-[#FFD16A]" />
           ) : (
-            <Send className="w-4 h-4" />
+            <Send className="w-4 h-4 text-[#FFD16A]" />
           )}
         </button>
       </form>

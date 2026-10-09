@@ -23,27 +23,27 @@ export default function BotStatus({ participants = [] }) {
       case 'Speaking':
         return {
           icon: Volume2,
-          badge: 'text-emerald-300 border-emerald-500/40 bg-emerald-950/40 shadow-sm shadow-emerald-500/20 animate-pulse',
+          badge: 'text-[#FFD16A] border-[#FFD16A]/40 bg-[#FFD16A]/10 shadow-sm animate-pulse',
         };
       case 'Listening':
         return {
           icon: Mic,
-          badge: 'text-purple-300 border-purple-500/40 bg-purple-950/40',
+          badge: 'text-[#a3d98b] border-[#4F7D32]/40 bg-[#4F7D32]/15',
         };
       case 'Thinking':
         return {
           icon: Brain,
-          badge: 'text-amber-300 border-amber-500/40 bg-amber-950/40 shadow-sm shadow-amber-500/20 animate-pulse',
+          badge: 'text-[#F5B52E] border-[#F5B52E]/40 bg-[#F5B52E]/15 shadow-sm animate-pulse',
         };
       case 'Ready':
         return {
           icon: CheckCircle2,
-          badge: 'text-slate-300 border-slate-700/60 bg-slate-900/60',
+          badge: 'text-stone-300 border-white/10 bg-white/[0.04]',
         };
       default:
         return {
           icon: Clock,
-          badge: 'text-slate-500 border-slate-800 bg-slate-900/50',
+          badge: 'text-stone-500 border-white/[0.06] bg-white/[0.02]',
         };
     }
   };
@@ -61,9 +61,9 @@ export default function BotStatus({ participants = [] }) {
         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${dostConfig.badge}`}
         title={`AI Dost: ${dostStatus}`}
       >
-        <Bot className="w-3.5 h-3.5 text-purple-400" />
-        <span className="font-semibold text-slate-200">AI Dost</span>
-        <span className="text-[11px] opacity-80 flex items-center gap-1">
+        <Bot className="w-3.5 h-3.5 text-[#FFD16A]" />
+        <span className="font-semibold text-stone-200">AI Dost</span>
+        <span className="text-[11px] opacity-90 flex items-center gap-1">
           <DostIcon className="w-3 h-3" />
           <span>{dostStatus}</span>
         </span>
@@ -74,9 +74,9 @@ export default function BotStatus({ participants = [] }) {
         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${sathiConfig.badge}`}
         title={`AI Sathi: ${sathiStatus}`}
       >
-        <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-        <span className="font-semibold text-slate-200">AI Sathi</span>
-        <span className="text-[11px] opacity-80 flex items-center gap-1">
+        <Sparkles className="w-3.5 h-3.5 text-[#a3d98b]" />
+        <span className="font-semibold text-stone-200">AI Sathi</span>
+        <span className="text-[11px] opacity-90 flex items-center gap-1">
           <SathiIcon className="w-3 h-3" />
           <span>{sathiStatus}</span>
         </span>
